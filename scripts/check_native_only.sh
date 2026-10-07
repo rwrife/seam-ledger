@@ -30,7 +30,7 @@ FP_PATTERNS=(
 for pat in "${FP_PATTERNS[@]}"; do
   hits=$(find . \
     \( -name .git -o -name DerivedData -o -name .build -o -name node_modules -o -name '.*.build' \) -prune \
-    -o -type f -name "$pat" -print || true)
+    -o -type f -name "$pat" -print)
   if [ -n "$hits" ]; then
     report "prohibited fingerprint file(s) found for pattern '$pat':"
     echo "$hits"
@@ -46,19 +46,23 @@ fi
 scan_manifest() {
   local label="$1" pattern="$2" glob="$3"
   local hits
-  hits=$(grep -RnlE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.build \
-    --exclude-dir=DerivedData --include="$glob" "$pattern" . 2>/dev/null || true)
-  if [ -n "$hits" ]; then
+  if hits=$(grep -RnlE --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.build \
+    --exclude-dir=DerivedData --include="$glob" "$pattern" .); then
     report "$label referenced in dependency manifest(s):"
     echo "$hits"
+  else
+    code=$?
+    [ "$code" -eq 1 ] || { echo "NATIVE-ONLY GATE FAILED — grep error: $code" >&2; exit "$code"; }
   fi
 }
 
 scan_manifest "React Native" '"react-native"|@react-native' "package.json"
 scan_manifest "Expo" '"expo"|expo-' "package.json"
 scan_manifest "Flutter (dart imports)" '^import .package:flutter' "*.dart"
-scan_manifest "Kotlin Multiplatform" 'kotlin\.multiplatform|org\.jetbrains\.kotlin\.multiplatform' "*.gradle.kts"
-scan_manifest ".NET MAUI" 'Microsoft\.Maui' "*.csproj"
+scan_manifest "Kotlin Multiplatform (kts)" 'kotlin\.multiplatform|org\.jetbrains\.kotlin\.multiplatform' "*.gradle.kts"
+scan_manifest "Kotlin Multiplatform (groovy)" 'kotlin\.multiplatform|org\.jetbrains\.kotlin\.multiplatform|kotlin-multiplatform|multiplatform' "*.gradle"
+scan_manifest ".NET MAUI (package)" 'Microsoft\.Maui' "*.csproj"
+scan_manifest ".NET MAUI (project property)" '<UseMaui>[[:space:]]*true[[:space:]]*</UseMaui>' "*.csproj"
 
 if [ "$fail" -ne 0 ]; then
   exit 1

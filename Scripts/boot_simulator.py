@@ -85,7 +85,7 @@ def _shutdown_best_effort(
         log.write(f"$ xcrun simctl shutdown {udid} (best-effort)\n")
         log.flush()
         try:
-            runner(
+            result = runner(
                 ["xcrun", "simctl", "shutdown", udid],
                 check=False,
                 text=True,
@@ -93,7 +93,8 @@ def _shutdown_best_effort(
                 stderr=subprocess.STDOUT,
                 timeout=timeout,
             )
-            log.write("shutdown accepted\n")
+            log.write(_text(result.stdout))
+            log.write(f"shutdown exited {result.returncode}\n")
         except subprocess.TimeoutExpired:
             log.write(f"xcrun simctl shutdown {udid} timed out after {timeout}s; ignoring\n")
 
@@ -131,22 +132,18 @@ def boot_selected_simulator(
     try:
         attempt_boot()
     except SimulatorBootError as error:
-        # Hosted runners sometimes hand out a simulator whose CoreSimulator
-        # boot wedges until the timeout (seat-weave PR #8/#9 measured this
-        # class of stall). One bounded shutdown + re-attempt absorbs it;
-        # a second timeout, or any non-timeout error, is fatal.
+        # Retry only a timeout; nonzero command failures remain fatal.
         if not error.timed_out:
             raise
+        state = "Shutdown"
         with log_path.open("a", encoding="utf-8") as log:
             log.write("Boot stalled; shutting down and retrying boot once.\n")
         _shutdown_best_effort(udid, log_path, timeout=30, runner=runner)
         try:
             attempt_boot()
         except SimulatorBootError as retry_error:
-            if not retry_error.timed_out:
-                raise
             raise SimulatorBootError(
-                f"{error} (retry after shutdown also timed out: {retry_error})"
+                f"{error} (retry after shutdown also failed: {retry_error})"
             ) from retry_error
 
 

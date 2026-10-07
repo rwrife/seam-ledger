@@ -10,7 +10,7 @@
 ## Verification Matrix
 
 ### Host / Container (Linux Swift 6.2-noble & Python 3)
-- `python3 -m unittest discover -s Scripts/tests -v`: PASS (21/21 tests passed)
+- `python3 -m unittest discover -s Scripts/tests -v`: PASS (host helper, contract-gate and already-booted retry regression tests)
 - `bash scripts/check_zero_network.sh`: PASS (empty allowlist, no networking symbols)
 - `bash scripts/check_native_only.sh`: PASS (no cross-platform or hybrid frameworks)
 - `bash -n Scripts/ci.sh`: PASS (syntax clean)
@@ -19,7 +19,15 @@
 - `swift test --package-path Packages/SeamLedgerStore`: PASS (2/2 swift-testing tests passed in container)
 - PBXproj pre-check: `TARGETED_DEVICE_FAMILY = 1;` declared in all 4 configurations; no `1,2` or non-iPhone values.
 
-### Apple CI Lane (macos-26)
+### Apple CI Lane (macos-26): acceptance still pending
+
+First run: https://github.com/rwrife/seam-ledger/actions/runs/37654875788
+measured Xcode 26.0.1 / 17A400 / iPhoneOS SDK 26.0 and installed the matching
+simulator runtime. Simulator boot exited 149 before app build or UI tests.
+Linux CI passed. This is not native app-build or simulator-test success.
+A fresh exact-head Apple run is required after the contract-gate repairs.
+
+The following are configured gates, not claimed execution results:
 - Exact toolchain selection: Xcode 26.0.1 (17A400)
 - iOS 26 SDK assertion
 - Required simulator platform runtime check/install

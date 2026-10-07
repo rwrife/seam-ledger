@@ -35,16 +35,26 @@ PATTERNS=(
   '\bbind[[:space:]]*\('
   '\baccept[[:space:]]*\('
   '\bNSURLSession\b'
+  '\bCF(Read|Write)StreamCreatePairWithSocketToHost\b'
+  '\bimport[[:space:]]+(CloudKit|WebKit)\b'
+  '\b(Data|NSData|String|NSString|NSArray|NSDictionary)[[:space:]]*\([[:space:]]*contentsOf(URL)?[[:space:]]*:'
+  'https?://'
 )
+# Remote-capable contentsOf initializers are deliberately prohibited here.
+# Future local imports must use a reviewed file-only adapter before relaxing this gate.
 
 matches=""
 for root in "${ROOTS[@]}"; do
-  [ -d "$root" ] || continue
+  [ -d "$root" ] || { echo "ZERO-NETWORK GATE FAILED — missing source root: $root" >&2; exit 1; }
   for pat in "${PATTERNS[@]}"; do
-    hits=$(grep -RnE --include='*.swift' --include='*.h' --include='*.m' --include='*.c' \
+    if hits=$(grep -RnE --include='*.swift' --include='*.h' --include='*.m' --include='*.c' \
       --exclude-dir=.build --exclude-dir=.swiftpm \
-      "$pat" "$root" 2>/dev/null || true)
-    [ -n "$hits" ] && matches+="$hits"$'\n'
+      "$pat" "$root"); then
+      matches+="$hits"$'\n'
+    else
+      code=$?
+      [ "$code" -eq 1 ] || { echo "ZERO-NETWORK GATE FAILED — grep error: $code" >&2; exit "$code"; }
+    fi
   done
 done
 

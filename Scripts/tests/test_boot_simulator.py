@@ -75,6 +75,20 @@ class BootTests(unittest.TestCase):
         self.assertIn("partial boot", log)
         self.assertIn("retrying boot once", log)
 
+    def test_booted_then_timeout_reboots_after_shutdown(self):
+        stalled = subprocess.TimeoutExpired(
+            ["xcrun", "simctl", "bootstatus", "PHONE-26", "-b"], 180
+        )
+        runner = FakeRunner([
+            stalled,
+            self.completed(output="shutdown ok\n"),
+            self.completed(output="boot requested\n"),
+            self.completed(output="booted\n"),
+        ])
+        boot_selected_simulator("PHONE-26", devices("Booted"), self.log_path, runner=runner)
+        verbs = [call[0][2] for call in runner.calls]
+        self.assertEqual(verbs, ["bootstatus", "shutdown", "boot", "bootstatus"])
+
     def test_bootstatus_timeout_recovers_on_single_retry(self):
         stalled = subprocess.TimeoutExpired(
             ["xcrun", "simctl", "bootstatus", "PHONE-26", "-b"], 180, output=""
