@@ -1,0 +1,9 @@
+Seam Ledger — your private cutting-table companion.
+
+Planned for home sewists who want a clear record between the pattern, the fabric pieces and the finished seam. Keep an owned pattern PDF beside your project, count outer and lining pieces separately, and record mirrored pairs without losing your place.
+
+The planned sewing workspace pairs named edges and compares the seam allowances you entered before you stitch. Record sewing and pressing independently, then save fitting notes and before-and-after alteration measurements for your next project. Missing values stay unspecified; the app does not guess fit, body measurements or construction safety.
+
+Designed around on-device storage with no account, cloud sync, ads or tracking. Planned CSV and PDF reports and a versioned backup give you ownership of your project history. Accessible controls, VoiceOver labels and Dynamic Type are part of the delivery plan.
+
+Development status: documentation and backlog only. These features are planned, not available in a released application. This description must be reviewed against implemented behavior before App Store submission.
