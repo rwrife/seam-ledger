@@ -49,9 +49,9 @@ GitHub Actions secret names configured: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, A
 
 ## Status and milestones
 
-Documentation/backlog scaffold only. No Swift application, Xcode project, build/test suite, icon, release Action, archive, simulator evidence or TestFlight build exists yet.
+Native iPhone skeleton (`SeamLedger.xcodeproj`), pure Swift foundation packages and pinned CI are implemented. See [bootstrap evidence](docs/bootstrap-evidence.md) for verified checks versus pending Apple evidence. No cutting/sewing workflow, database, icon, release Action, signed archive or TestFlight build is delivered by this foundation.
 
-1. #1 Native skeleton and CI.
+1. #1 Native skeleton and CI (Apple evidence required before completion).
 2. #2 Measurement/count domain and persistence.
 3. #3 Project/cutting workflow.
 4. #4 Seam pairing, sewing/pressing and alteration record.
@@ -61,7 +61,7 @@ Documentation/backlog scaffold only. No Swift application, Xcode project, build/
 
 ## Development quickstart
 
-At this stage review README, PLAN and toolchain.json; there is no executable app command. After #1: use the pinned Xcode to open `SeamLedger.xcodeproj`, build the iPhone simulator scheme and run native tests. The planned pure-Swift package lives at `Packages/SeamLedgerKit`; `swift test --package-path Packages/SeamLedgerKit` becomes valid only after it exists. Linux checks cannot validate an Apple archive. See PLAN for evidence gates.
+Run `swift test --package-path Packages/SeamLedgerKit` and `swift test --package-path Packages/SeamLedgerStore` with Swift 6.2. Run `bash scripts/check_zero_network.sh` and `bash scripts/check_native_only.sh`. On macOS with the exact pinned toolchain, open `SeamLedger.xcodeproj`, build the `SeamLedger` iPhone scheme and run its launch test. Linux package checks cannot validate a native app, simulator, archive or signing. See PLAN for evidence gates.
 
 ## License
 
