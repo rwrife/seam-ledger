@@ -91,14 +91,14 @@ class BootTests(unittest.TestCase):
 
     def test_bootstatus_timeout_recovers_on_single_retry(self):
         stalled = subprocess.TimeoutExpired(
-            ["xcrun", "simctl", "bootstatus", "PHONE-26", "-b"], 180, output=""
+            ["xcrun", "simctl", "bootstatus", "PHONE-26", "-b"], 300, output=""
         )
         runner = FakeRunner(
             [
                 self.completed(output="boot requested\n"),
                 stalled,
                 self.completed(output="shutdown ok\n"),
-                self.completed(output="boot requested again\n"),
+                self.completed(returncode=149, output="already booting\n"),
                 self.completed(output="booted\n"),
             ]
         )
@@ -116,6 +116,18 @@ class BootTests(unittest.TestCase):
                 ["bootstatus", "PHONE-26"],
             ],
         )
+        self.assertEqual([call[1]["timeout"] for call in runner.calls], [120, 300, 30, 120, 180])
+        self.assertIn("exit 149", self.log_path.read_text())
+
+    def test_bootstatus_timeout_on_retry_is_fatal(self):
+        stalled = subprocess.TimeoutExpired(["xcrun", "simctl", "bootstatus"], 300)
+        runner = FakeRunner([
+            self.completed(), stalled, self.completed(), self.completed(),
+            subprocess.TimeoutExpired(["xcrun", "simctl", "bootstatus"], 180),
+        ])
+        with self.assertRaisesRegex(SimulatorBootError, "retry after shutdown also failed"):
+            boot_selected_simulator("PHONE-26", devices(), self.log_path, runner=runner)
+        self.assertEqual(runner.calls[-1][1]["timeout"], 180)
 
     def test_boot_shutdown_failure_is_tolerated_before_retry(self):
         first = subprocess.TimeoutExpired(

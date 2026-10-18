@@ -106,31 +106,48 @@ def boot_selected_simulator(
     *,
     boot_timeout: int = 120,
     bootstatus_timeout: int = 180,
+    first_bootstatus_timeout: int = 300,
     runner: Runner = subprocess.run,
 ) -> None:
     state = device_state(devices, udid)
     log_path.write_text(f"Selected {udid}; initial state is {state}\n", encoding="utf-8")
 
-    def attempt_boot() -> None:
+    def attempt_boot(*, status_timeout: int) -> None:
         if state == "Booted":
             with log_path.open("a", encoding="utf-8") as log:
                 log.write("Simulator is already Booted; skipping simctl boot.\n")
         else:
-            run_logged(
-                ["xcrun", "simctl", "boot", udid],
-                boot_timeout,
-                log_path,
-                runner=runner,
-            )
+            try:
+                run_logged(
+                    ["xcrun", "simctl", "boot", udid],
+                    boot_timeout,
+                    log_path,
+                    runner=runner,
+                )
+            except SimulatorBootError as boot_error:
+                # simctl exit 149 means the device is already booted or still
+                # booting (an in-flight boot was interrupted, e.g. by a prior
+                # bootstatus timeout). Not fatal: bootstatus decides readiness.
+                if "exited 149" not in str(boot_error):
+                    raise
+                with log_path.open("a", encoding="utf-8") as log:
+                    log.write(
+                        "simctl boot reported the device as already booting "
+                        "(exit 149); waiting on bootstatus instead.\n"
+                    )
         run_logged(
             ["xcrun", "simctl", "bootstatus", udid, "-b"],
-            bootstatus_timeout,
+            status_timeout,
             log_path,
             runner=runner,
         )
 
     try:
-        attempt_boot()
+        # The FIRST boot after a fresh platform download lazily prepares the
+        # device image and has been measured exceeding the normal bound on
+        # hosted runners; give it a larger bound. The retry uses the normal
+        # bound because the image is warm by then.
+        attempt_boot(status_timeout=first_bootstatus_timeout)
     except SimulatorBootError as error:
         # Retry only a timeout; nonzero command failures remain fatal.
         if not error.timed_out:
@@ -140,7 +157,7 @@ def boot_selected_simulator(
             log.write("Boot stalled; shutting down and retrying boot once.\n")
         _shutdown_best_effort(udid, log_path, timeout=30, runner=runner)
         try:
-            attempt_boot()
+            attempt_boot(status_timeout=bootstatus_timeout)
         except SimulatorBootError as retry_error:
             raise SimulatorBootError(
                 f"{error} (retry after shutdown also failed: {retry_error})"
@@ -167,6 +184,7 @@ def main() -> int:
     boot_parser.add_argument("--log", type=Path, required=True)
     boot_parser.add_argument("--boot-timeout", type=int, default=120)
     boot_parser.add_argument("--bootstatus-timeout", type=int, default=180)
+    boot_parser.add_argument("--first-bootstatus-timeout", type=int, default=300)
 
     capture_parser = subparsers.add_parser("capture")
     capture_parser.add_argument("--output", type=Path, required=True)
@@ -188,6 +206,7 @@ def main() -> int:
             args.log,
             boot_timeout=args.boot_timeout,
             bootstatus_timeout=args.bootstatus_timeout,
+            first_bootstatus_timeout=args.first_bootstatus_timeout,
         )
     except (OSError, json.JSONDecodeError, SimulatorBootError) as error:
         print(f"Simulator boot failed: {error}", file=sys.stderr)
