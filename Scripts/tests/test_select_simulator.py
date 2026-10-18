@@ -57,6 +57,32 @@ class DestinationTests(unittest.TestCase):
         with self.assertRaisesRegex(DestinationError, "iOS 26.0"):
             select_destination(devices, "26.0")
 
+    def test_prefers_mainstream_iphone_over_newer_slower_models(self):
+        # Measured CI failure: reverse-alphabetical sorting picked iPhone Air,
+        # whose first boot never completed on three consecutive runners.
+        devices = {
+            "devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"name": "iPhone Air", "udid": "AIR", "isAvailable": True},
+                    {"name": "iPhone 17e", "udid": "E", "isAvailable": True},
+                    {"name": "iPhone 17 Pro Max", "udid": "PROMAX", "isAvailable": True},
+                    {"name": "iPhone 17 Pro", "udid": "PRO", "isAvailable": True},
+                ]
+            }
+        }
+        self.assertEqual(select_destination(devices, "26.0"), "PRO")
+
+    def test_falls_back_alphabetically_for_unknown_models(self):
+        devices = {
+            "devices": {
+                "com.apple.CoreSimulator.SimRuntime.iOS-26-0": [
+                    {"name": "iPhone Zeta", "udid": "Z", "isAvailable": True},
+                    {"name": "iPhone Alpha", "udid": "A", "isAvailable": True},
+                ]
+            }
+        }
+        self.assertEqual(select_destination(devices, "26.0"), "A")
+
 
 class EnumerationTests(unittest.TestCase):
     def setUp(self):

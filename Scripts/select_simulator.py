@@ -11,6 +11,17 @@ import sys
 
 DEFAULT_TIMEOUT_SECONDS = 30
 
+# Hosted runners have measured slow/never-first-booting device types under a
+# freshly downloaded runtime (iPhone Air on iOS 26.0 stalled past 300s+180s on
+# three consecutive macos-26 runners, UDIDs 4FC9E9FC/11C1BD30/FD564C52).
+# Prefer mainstream iPhone types; unknown types rank last.
+_DEVICE_PREFERENCE = (
+    "iPhone 17 Pro",
+    "iPhone 17 Pro Max",
+    "iPhone 17",
+    "iPhone 17e",
+)
+
 
 class DestinationError(ValueError):
     pass
@@ -37,8 +48,14 @@ def select_destination(payload: dict, sdk_version: str) -> str:
     ]
     if not candidates:
         raise DestinationError(f"No available iPhone simulator found for iOS {sdk_version}")
-    candidates.sort(key=lambda device: (device["name"], device["udid"]), reverse=True)
-    return str(candidates[0]["udid"])
+
+    def rank(device: dict) -> tuple:
+        name = str(device["name"])
+        # Exact match only: "iPhone 17 Pro Max" must not match prefix "iPhone 17 Pro".
+        preference = _DEVICE_PREFERENCE.index(name) if name in _DEVICE_PREFERENCE else len(_DEVICE_PREFERENCE)
+        return (preference, name, str(device["udid"]))
+
+    return str(sorted(candidates, key=rank)[0]["udid"])
 
 
 def enumerate_available_devices(
