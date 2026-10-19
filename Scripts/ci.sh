@@ -104,21 +104,17 @@ if ! xcrun simctl list runtimes | grep -q "$runtime_id"; then
   }
 fi
 
-phase="simulator_selection"
-sdk_version="$(python3 -c 'import json; print(json.load(open("toolchain.json", encoding="utf-8"))["iphoneos_sdk"])')"
-simulator_udid="$(python3 Scripts/select_simulator.py \
-  --sdk "$sdk_version" \
-  --devices-json-out "$artifact_dir/simulator-devices.json")"
-echo "platform=iOS Simulator,id=$simulator_udid" > "$artifact_dir/destination.txt"
-
-phase="simulator_boot"
-python3 Scripts/boot_simulator.py boot \
-  --udid "$simulator_udid" \
-  --devices-json "$artifact_dir/simulator-devices.json" \
-  --log "$artifact_dir/simulator-boot.log" \
-  --boot-timeout 120 \
-  --bootstatus-timeout 180 \
-  2> >(tee -a "$artifact_dir/simulator-boot.log" >&2)
+# Manual `simctl boot` of the just-downloaded iOS 26.0 universal runtime
+# stalls past 300s+180s on every current macos-26 runner (7 consecutive
+# fresh runners, UDIDs incl. 3DF4C6FD/141C9B1D/6434DD90; post-failure
+# `simctl list` wedges too). chore-wheel run 39225814975 proves the green
+# pattern on the same pinned toolchain: build for the generic simulator
+# destination (no boot; the exact downloaded runtime only has to exist for
+# actool) and let `xcodebuild test` boot a pre-installed-runtime device
+# (name=iPhone 17,OS=latest). Exact Xcode/SDK pinning is unchanged.
+phase="test_destination"
+simulator_udid="xcodebuild-managed:iPhone 17,OS=latest"
+echo "platform=iOS Simulator,name=iPhone 17,OS=latest" > "$artifact_dir/destination.txt"
 
 phase="domain_tests"
 xcrun swift test \
@@ -138,7 +134,7 @@ xcodebuild build \
   -project SeamLedger.xcodeproj \
   -scheme SeamLedger \
   -configuration Debug \
-  -destination "platform=iOS Simulator,id=$simulator_udid" \
+  -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$artifact_dir/build.xcresult" \
   CODE_SIGNING_ALLOWED=NO \
@@ -177,7 +173,7 @@ xcodebuild test \
   -project SeamLedger.xcodeproj \
   -scheme SeamLedger \
   -configuration Debug \
-  -destination "platform=iOS Simulator,id=$simulator_udid" \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
   -derivedDataPath "$derived_data" \
   -resultBundlePath "$artifact_dir/tests.xcresult" \
   CODE_SIGNING_ALLOWED=NO \
