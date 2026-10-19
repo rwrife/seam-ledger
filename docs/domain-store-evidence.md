@@ -59,9 +59,12 @@ Exact unedited output is retained under the ignored `build/issue2-evidence/`:
 `initial-tests.log` (early fixture-not-yet-present failure), `package-tests.log`
 (unflagged SQLite linker failure), `final-package-tests.log`,
 `final-helper-tests.log`, `zero-network.log`, and `native-only.log`.
-Final results: 6 domain tests, 4 store tests, and 33 Python helper tests pass,
-including the original M1 smoke tests. Both source gates and `git diff --check`
-pass.
+Final results: 7 domain tests, 5 store tests, and 34 Python helper tests pass,
+including the original M1 smoke tests, a rejected-event state-preservation test,
+and a reconcile-then-failing-event batch rollback test. Both source gates and
+`git diff --check` pass. The dependency gate fails closed on comment- or
+spacing-obscured extra `.package` declarations and on local paths escaping
+`Packages/` (regression-tested).
 
 Linux package tests and source gates do not prove iOS compilation or execution.
 Apple native build/test evidence remains outstanding; the existing pinned native

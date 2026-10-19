@@ -65,6 +65,25 @@ import SeamLedgerKit
         #expect(throws: LedgerError.invalidInput) { try isolated.load(id: "p") }
     }
 
+    @Test func reconcileThenFailingEventRollsBackWholeBatch() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("batch.sqlite").path
+        let store = try ProjectStore(path: path)
+        try store.create(id: "p", definition: definition())
+        let changed = try ProjectDefinition(pieces: [Piece(id: "pair", requiredCount: 1)])
+        #expect(throws: LedgerError.reconciliationRequired) {
+            try store.append(projectID: "p", events: [
+                .init(id: "reconcile", revision: 0, action: .reconcile(changed)),
+                .init(id: "stale", revision: 0, action: .cut(pieceID: "pair", physicalIndex: 1)),
+            ])
+        }
+        let loaded = try ProjectStore(path: path).load(id: "p")
+        #expect(loaded.revision == 0)
+        #expect(loaded.history.isEmpty)
+        #expect(try loaded.remaining(pieceID: "pair") == 2)
+    }
+
     @Test func migratesRealV1Fixture() throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

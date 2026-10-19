@@ -30,8 +30,9 @@ jobs:
       - name: Run domain tests
         run: swift test --package-path Packages/SeamLedgerKit
       - name: Run store tests
-        # Ubuntu's libsqlite3 lacks the snapshot APIs GRDB assumes, so build
-        # GRDB's bundled SQLite amalgamation on this Linux lane only.
+        # Ubuntu's libsqlite3 lacks the snapshot APIs GRDB probes for, so the
+        # Linux lane defines GRDBCUSTOMSQLITE to take GRDB's non-snapshot
+        # SQLite path. The native lane is unchanged.
         run: swift test --package-path Packages/SeamLedgerStore -Xswiftc -DGRDBCUSTOMSQLITE
       - name: Zero-network gate
         run: bash scripts/check_zero_network.sh

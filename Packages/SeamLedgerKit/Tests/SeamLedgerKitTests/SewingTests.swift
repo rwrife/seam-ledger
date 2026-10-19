@@ -46,6 +46,16 @@ import Testing
         #expect(throws: LedgerError.invalidInput) { try ProjectDefinition(pieces: [definition.pieces[0], definition.pieces[0]]) }
     }
 
+    @Test func rejectedEventLeavesStateUnchanged() throws {
+        var project = try SewingProject(definition: ProjectDefinition(pieces: [Piece(id: "p", requiredCount: 2)]))
+        try project.apply(.init(id: "cut", revision: 0, action: .cut(pieceID: "p", physicalIndex: 1)))
+        #expect(throws: LedgerError.invalidTransition) {
+            try project.apply(.init(id: "dup", revision: 0, action: .cut(pieceID: "p", physicalIndex: 1)))
+        }
+        #expect(project.history.count == 1)
+        #expect(try project.remaining(pieceID: "p") == 1)
+    }
+
     @Test func independentSeamEventsAndPairing() throws {
         let mm = try Allowance(10, unit: .millimetre)
         let definition = try ProjectDefinition(pieces: [Piece(id: "p", requiredCount: 1)], edges: [

@@ -35,6 +35,9 @@ class ContractGateTests(unittest.TestCase):
     def test_exact_grdb_dependency_passes(self):
         store = self.root / "Packages" / "SeamLedgerStore"
         store.mkdir()
+        kit = self.root / "Packages" / "SeamLedgerKit"
+        kit.mkdir()
+        shutil.copy2(ROOT / "Packages/SeamLedgerKit/Package.swift", kit)
         shutil.copy2(ROOT / "Packages/SeamLedgerStore/Package.swift", store)
         shutil.copy2(ROOT / "Packages/SeamLedgerStore/Package.resolved", store)
         self.assertEqual(self.run_gate("check_zero_network.sh").returncode, 0)
@@ -58,6 +61,21 @@ class ContractGateTests(unittest.TestCase):
         lock = store / "Package.resolved"
         lock.write_text((ROOT / "Packages/SeamLedgerStore/Package.resolved").read_text().replace(
             "18497b68fdbb3a09528d260a0a0e1e7e61c8c53d", "0" * 40))
+        self.assertNotEqual(self.run_gate("check_zero_network.sh").returncode, 0)
+
+    def test_comment_obscured_or_escaping_dependency_fails(self):
+        store = self.root / "Packages" / "SeamLedgerStore"
+        store.mkdir()
+        shutil.copy2(ROOT / "Packages/SeamLedgerStore/Package.resolved", store)
+        original = (ROOT / "Packages/SeamLedgerStore/Package.swift").read_text()
+        smuggled = '.package/*c*/(path: "../../Vendor/extra"),\n'
+        spaced = '.package (url: "https://github.com/other/pkg.git", exact: "1.0.0"),\n'
+        manifest = store / "Package.swift"
+        manifest.write_text(original.replace(
+            '    targets: [', smuggled + '    targets: ['))
+        self.assertNotEqual(self.run_gate("check_zero_network.sh").returncode, 0)
+        manifest.write_text(original.replace(
+            '    targets: [', spaced + '    targets: ['))
         self.assertNotEqual(self.run_gate("check_zero_network.sh").returncode, 0)
 
     def test_runtime_network_api_still_fails_with_grdb(self):
