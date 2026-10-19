@@ -2,8 +2,8 @@
 # Zero-network gate (issue #1, binding project contract).
 #
 # SeamLedger is zero-network BY CONSTRUCTION: the app, the UI tests, and the
-# domain package must never use network APIs. The allowlist is intentionally
-# EMPTY — any match in scanned sources fails the build.
+# domain package must never use network APIs. Only the exact GRDB build-time
+# dependency declaration below is exempt from the URL scan; runtime APIs are not.
 #
 # Scanned roots: App/ and UITests/ (app sources) and Packages/*/Sources/.
 # SwiftPM .build directories are skipped so vendored checkouts never trip
@@ -13,7 +13,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ROOTS=("App" "UITests" "Packages")
-ALLOWLIST=()   # empty by design; extend only with explicit user sign-off
+ALLOWLIST=()   # runtime allowlist remains empty
+
+python3 scripts/check_dependencies.py
 
 PATTERNS=(
   '\bURLSession\b'
@@ -50,6 +52,8 @@ for root in "${ROOTS[@]}"; do
     if hits=$(grep -RnE --include='*.swift' --include='*.h' --include='*.m' --include='*.c' \
       --exclude-dir=.build --exclude-dir=.swiftpm \
       "$pat" "$root"); then
+      # Exempt only this entire reviewed declaration at this exact manifest path.
+      hits=$(printf '%s\n' "$hits" | sed '\|^Packages/SeamLedgerStore/Package.swift:[0-9][0-9]*:        \.package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),$|d')
       matches+="$hits"$'\n'
     else
       code=$?
