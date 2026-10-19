@@ -20,6 +20,7 @@ asc_private/
 .idea/
 .vscode/
 *.sqlite
+!Packages/SeamLedgerStore/Tests/SeamLedgerStoreTests/Fixtures/v1.sqlite
 *.sqlite-shm
 *.sqlite-wal
 exports/

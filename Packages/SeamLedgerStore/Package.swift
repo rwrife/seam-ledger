@@ -1,8 +1,6 @@
 // swift-tools-version:6.0
 import PackageDescription
 
-// SeamLedgerStore — persistence layer for SeamLedger (GRDB/SQLite stub in M1).
-// Pure domain storage package, Linux-testable by design.
 let package = Package(
     name: "SeamLedgerStore",
     platforms: [
@@ -14,9 +12,10 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../SeamLedgerKit"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),
     ],
     targets: [
-        .target(name: "SeamLedgerStore", dependencies: ["SeamLedgerKit"]),
-        .testTarget(name: "SeamLedgerStoreTests", dependencies: ["SeamLedgerStore"]),
+        .target(name: "SeamLedgerStore", dependencies: ["SeamLedgerKit", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "SeamLedgerStoreTests", dependencies: ["SeamLedgerStore", .product(name: "GRDB", package: "GRDB.swift")], resources: [.copy("Fixtures")]),
     ]
 )

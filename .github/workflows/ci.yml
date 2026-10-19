@@ -23,10 +23,16 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Swift version
         run: swift --version
+      - name: Install SQLite headers (GRDB CSQLite target)
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq libsqlite3-dev
       - name: Run domain tests
         run: swift test --package-path Packages/SeamLedgerKit
       - name: Run store tests
-        run: swift test --package-path Packages/SeamLedgerStore
+        # Ubuntu's libsqlite3 lacks the snapshot APIs GRDB assumes, so build
+        # GRDB's bundled SQLite amalgamation on this Linux lane only.
+        run: swift test --package-path Packages/SeamLedgerStore -Xswiftc -DGRDBCUSTOMSQLITE
       - name: Zero-network gate
         run: bash scripts/check_zero_network.sh
       - name: Native-only gate
