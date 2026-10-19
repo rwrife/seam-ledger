@@ -23,10 +23,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Swift version
         run: swift --version
-      - name: Install SQLite headers (GRDB CSQLite target)
+      - name: Install SQLite headers and dependency-gate Python
         run: |
           apt-get update -qq
-          apt-get install -y -qq libsqlite3-dev
+          apt-get install -y -qq libsqlite3-dev python3-minimal
+      - name: Run dependency-gate regression tests
+        run: python3 -m unittest discover -s Scripts/tests -p test_contract_gates.py -v
       - name: Run domain tests
         run: swift test --package-path Packages/SeamLedgerKit
       - name: Run store tests
