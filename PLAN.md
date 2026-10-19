@@ -12,7 +12,7 @@ No Flutter, React Native, Expo, Kotlin Multiplatform, .NET MAUI, Unity or other 
 
 ## Milestones and dependencies
 
-1. **Skeleton/CI (#1):** Xcode iPhone-only app, pure Swift package and store package, Linux unit-test lane, pinned macos-26 build/test lane, zero-network and bundle/device-family checks.
+1. **Skeleton/CI (#1):** Xcode iPhone-only app, pure Swift package and store package, Linux unit-test lane, pinned macos-26 build/test lane, zero-network and bundle/device-family checks. Native evidence is required before completion.
 2. **Domain/store (#2):** project, piece, edge, seam, cutting events, fixed-unit conversions, GRDB migrations, fixture tests, reversible transitions. Depends on #1.
 3. **Cut table (#3):** editable project and PDF import, distinct outer/lining pieces, mirrored-pair accounting and reversible cuts; explicit reconcile if definitions change. Depends on #2.
 4. **Sewing record (#4):** edge pairing, mismatch display, sewn/pressed events, alteration measurements and optional photos. Depends on #3.

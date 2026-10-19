@@ -6,4 +6,4 @@ The planned sewing workspace pairs named edges and compares the seam allowances 
 
 Designed around on-device storage with no account, cloud sync, ads or tracking. Planned CSV and PDF reports and a versioned backup give you ownership of your project history. Accessible controls, VoiceOver labels and Dynamic Type are part of the delivery plan.
 
-Development status: documentation and backlog only. These features are planned, not available in a released application. This description must be reviewed against implemented behavior before App Store submission.
+Development status: native iPhone foundation only. Cutting, sewing, storage and export features are planned, not available in a released application. This description must be reviewed against implemented behavior before App Store submission.
