@@ -4,7 +4,6 @@ import SeamLedgerKit
 import SeamLedgerStore
 import SwiftUI
 import UniformTypeIdentifiers
-import UIKit
 
 // ponytail: One local workspace; project sharing and multiwindow edits need a separate sync design.
 struct BootstrapHomeView: View {
@@ -13,6 +12,7 @@ struct BootstrapHomeView: View {
     @State private var selectedID: String?
     @State private var project: SewingProject?
     @State private var name = ""
+    @FocusState private var projectNameFocused: Bool
     @State private var pieceName = ""
     @State private var requiredCount = ""
     @State private var material: PieceMaterial = .outer
@@ -76,8 +76,11 @@ struct BootstrapHomeView: View {
             }
             TextField("Project name", text: $name)
                 .textContentType(.none)
+                .focused($projectNameFocused)
+                .submitLabel(.done)
                 .accessibilityIdentifier("project.name")
             Button("Create project") {
+                projectNameFocused = false
                 perform {
                     guard let store else { throw LedgerError.invalidInput }
                     let id = UUID().uuidString
