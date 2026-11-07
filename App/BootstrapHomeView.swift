@@ -19,6 +19,8 @@ struct BootstrapHomeView: View {
     @State private var mirrored = false
     @State private var fold = false
     @State private var importing = false
+    @State private var showingReference = false
+    @FocusState private var pieceNameFocused: Bool
     @State private var error: String?
     @State private var pendingDefinition: ProjectDefinition?
 
@@ -99,14 +101,6 @@ struct BootstrapHomeView: View {
         VStack(alignment: .leading, spacing: 18) {
             let info = projects.first(where: { $0.id == id })
             Text(info?.name ?? "Project").font(.title2.bold())
-            if let file = info?.referenceFile {
-                let url = referenceDirectory.appending(path: file)
-                if FileManager.default.fileExists(atPath: url.path) {
-                    PDFKitView(url: url).frame(height: 330).accessibilityIdentifier("reference.document")
-                } else {
-                    Text("Reference PDF missing").foregroundStyle(.red)
-                }
-            }
             Button("Import owned PDF") {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-UITestPDF") {
@@ -156,7 +150,10 @@ struct BootstrapHomeView: View {
             Divider()
             Text(current.definition.pieces.isEmpty ? "Add first piece" : "Change pieces (resets progress after confirmation)")
                 .font(.headline)
-            TextField("Named piece", text: $pieceName).accessibilityIdentifier("piece.name")
+            TextField("Named piece", text: $pieceName)
+                .focused($pieceNameFocused)
+                .submitLabel(.done)
+                .accessibilityIdentifier("piece.name")
             Picker("Material", selection: $material) {
                 Text("Outer").tag(PieceMaterial.outer)
                 Text("Lining").tag(PieceMaterial.lining)
@@ -191,6 +188,23 @@ struct BootstrapHomeView: View {
             }
             .disabled(pieceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("piece.add")
+            if let file = info?.referenceFile {
+                let url = referenceDirectory.appending(path: file)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    Button("Open owned reference PDF") { pieceNameFocused = false; showingReference = true }
+                        .accessibilityIdentifier("reference.open")
+                        .sheet(isPresented: $showingReference) {
+                            NavigationStack {
+                                PDFKitView(url: url)
+                                    .accessibilityIdentifier("reference.document")
+                                    .navigationTitle("Owned reference")
+                                    .toolbar { Button("Done") { showingReference = false } }
+                            }
+                        }
+                } else {
+                    Text("Reference PDF missing").foregroundStyle(.red)
+                }
+            }
         }
     }
 

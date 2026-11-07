@@ -16,13 +16,13 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let importButton = app.buttons["reference.import"]
         XCTAssertTrue(importButton.waitForExistence(timeout: 10))
         importButton.tap()
-        XCTAssertFalse(app.staticTexts["Reference PDF missing"].exists)
+        XCTAssertTrue(app.buttons["reference.open"].waitForExistence(timeout: 10))
         let pieceName = app.textFields["piece.name"]
-        for _ in 0..<4 where !pieceName.isHittable { app.swipeUp() }
         pieceName.tap()
         pieceName.typeText("Sleeves")
-        if app.keyboards.buttons["return"].exists { app.keyboards.buttons["return"].tap() }
+        app.keyboards.buttons["Done"].tap()
         let mirrored = app.switches["piece.mirrored"]
+        for _ in 0..<3 where !mirrored.isHittable { app.swipeUp() }
         mirrored.tap()
         XCTAssertTrue(String(describing: mirrored.value).contains("1"))
         app.buttons["piece.add"].tap()
