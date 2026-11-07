@@ -24,7 +24,43 @@ public final class ProjectStore: Sendable {
                 )
                 """)
         }
+        migrator.registerMigration("v3-project-metadata") { db in
+            try db.execute(sql: "ALTER TABLE projects ADD COLUMN name TEXT NOT NULL DEFAULT 'Untitled'")
+            try db.execute(sql: "ALTER TABLE projects ADD COLUMN referenceFile TEXT")
+        }
         try migrator.migrate(database)
+    }
+
+    public struct ProjectInfo: Equatable, Sendable, Identifiable {
+        public let id: String
+        public let name: String
+        public let referenceFile: String?
+    }
+
+    public func projects() throws -> [ProjectInfo] {
+        try database.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, name, referenceFile FROM projects ORDER BY name, id")
+                .map { ProjectInfo(id: $0["id"], name: $0["name"], referenceFile: $0["referenceFile"]) }
+        }
+    }
+
+    public func setReferenceFile(_ filename: String, projectID: String) throws {
+        guard filename.hasSuffix(".pdf"),
+              UUID(uuidString: String(filename.dropLast(4))) != nil else { throw LedgerError.invalidInput }
+        try database.write { db in
+            try db.execute(sql: "UPDATE projects SET referenceFile = ? WHERE id = ?", arguments: [filename, projectID])
+            guard db.changesCount == 1 else { throw LedgerError.invalidInput }
+        }
+    }
+
+    public func create(id: String, name: String, definition: ProjectDefinition) throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LedgerError.invalidInput }
+        guard !id.isEmpty else { throw LedgerError.invalidInput }
+        try definition.validate()
+        let data = try JSONEncoder().encode(definition)
+        try database.write { db in
+            try db.execute(sql: "INSERT INTO projects (id, definition, name) VALUES (?, ?, ?)", arguments: [id, data, name])
+        }
     }
 
     public func create(id: String, definition: ProjectDefinition) throws {
