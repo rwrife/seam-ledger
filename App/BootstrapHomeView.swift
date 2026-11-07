@@ -4,6 +4,7 @@ import SeamLedgerKit
 import SeamLedgerStore
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 // ponytail: One local workspace; project sharing and multiwindow edits need a separate sync design.
 struct BootstrapHomeView: View {
@@ -103,7 +104,25 @@ struct BootstrapHomeView: View {
                     Text("Reference PDF missing").foregroundStyle(.red)
                 }
             }
-            Button("Import owned PDF") { importing = true }
+            Button("Import owned PDF") {
+                #if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-UITestPDF") {
+                    perform {
+                        let url = FileManager.default.temporaryDirectory.appending(path: "seam-ledger-fixture.pdf")
+                        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200))
+                        try renderer.pdfData { context in
+                            context.beginPage()
+                            "Owned reference".draw(at: CGPoint(x: 20, y: 20), withAttributes: nil)
+                        }.write(to: url, options: .atomic)
+                        importReference(.success(url))
+                    }
+                } else {
+                    importing = true
+                }
+                #else
+                importing = true
+                #endif
+            }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("reference.import")
             let summary = current.summary
