@@ -104,15 +104,15 @@ struct BootstrapHomeView: View {
             Button("Import owned PDF") {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-UITestPDF") {
-                    perform {
-                        let url = FileManager.default.temporaryDirectory.appending(path: "seam-ledger-fixture.pdf")
-                        let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200))
+                    let url = FileManager.default.temporaryDirectory.appending(path: "seam-ledger-fixture.pdf")
+                    let renderer = UIGraphicsPDFRenderer(bounds: CGRect(x: 0, y: 0, width: 200, height: 200))
+                    do {
                         try renderer.pdfData { context in
                             context.beginPage()
                             "Owned reference".draw(at: CGPoint(x: 20, y: 20), withAttributes: nil)
                         }.write(to: url, options: .atomic)
                         importReference(.success(url))
-                    }
+                    } catch { self.error = error.localizedDescription }
                 } else {
                     importing = true
                 }
@@ -217,7 +217,11 @@ struct BootstrapHomeView: View {
     }
     private func refreshProjects() { perform { projects = try store?.projects() ?? [] } }
     private func load(_ id: String) {
-        perform { project = try store?.load(id: id); selectedID = id }
+        perform {
+            project = try store?.load(id: id)
+            selectedID = id
+            refreshProjects()
+        }
     }
     private func append(_ action: SewingAction) throws {
         guard let store, let selectedID, let project else { throw LedgerError.invalidInput }

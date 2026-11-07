@@ -16,8 +16,9 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let importButton = app.buttons["reference.import"]
         XCTAssertTrue(importButton.waitForExistence(timeout: 10))
         importButton.tap()
-        XCTAssertTrue(app.buttons["reference.open"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["reference.open"].waitForExistence(timeout: 10), app.debugDescription)
         let pieceName = app.textFields["piece.name"]
+        XCTAssertTrue(pieceName.isHittable, app.debugDescription)
         pieceName.tap()
         pieceName.typeText("Sleeves")
         app.keyboards.buttons["Done"].tap()
