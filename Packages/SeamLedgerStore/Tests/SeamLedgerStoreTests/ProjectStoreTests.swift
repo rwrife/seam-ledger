@@ -84,6 +84,35 @@ import SeamLedgerKit
         #expect(try loaded.remaining(pieceID: "pair") == 2)
     }
 
+    @Test func namedProjectsReferenceAndProgressSurviveRelaunch() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("workspace.sqlite").path
+        let store = try ProjectStore(path: path)
+        let empty = try ProjectDefinition(pieces: [])
+        try store.create(id: "jacket", name: "Linen jacket", definition: empty)
+        #expect(try store.projects().map(\.name) == ["Linen jacket"])
+        #expect(throws: LedgerError.invalidInput) { try store.setReferenceFile("../bad.pdf", projectID: "jacket") }
+        let file = UUID().uuidString + ".pdf"
+        try store.setReferenceFile(file, projectID: "jacket")
+        let pair = try Piece(id: "sleeve", requiredCount: 2, cutOnFold: true, material: .lining, mirrored: true)
+        let unknown = try Piece(id: "collar", requiredCount: nil)
+        let changed = try ProjectDefinition(pieces: [pair, unknown])
+        try store.append(projectID: "jacket", events: [.init(id: "define", revision: 0, action: .reconcile(changed))])
+        try store.append(projectID: "jacket", events: [.init(id: "cut", revision: 1, action: .cut(pieceID: "sleeve", physicalIndex: 1))])
+        let reopened = try ProjectStore(path: path)
+        #expect(try reopened.projects().first?.referenceFile == file)
+        let progress = try reopened.load(id: "jacket")
+        #expect(progress.completedCuts(pieceID: "sleeve") == [1])
+        #expect(progress.summary.hasUnknownCounts)
+        #expect(progress.pieceProgressList[0].remainingCount == 1)
+        #expect(progress.pieceProgressList[1].remainingCount == nil)
+        try reopened.append(projectID: "jacket", events: [.init(id: "undo", revision: 1, action: .undoCut(pieceID: "sleeve", physicalIndex: 1))])
+        #expect(try ProjectStore(path: path).load(id: "jacket").completedCuts(pieceID: "sleeve").isEmpty)
+        let encoded = try JSONEncoder().encode(pair)
+        #expect(try JSONDecoder().decode(Piece.self, from: encoded) == pair)
+    }
+
     @Test func migratesRealV1Fixture() throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -97,6 +126,6 @@ import SeamLedgerKit
         #expect(try store.load(id: "legacy").remaining(pieceID: "pair") == 2)
         try store.append(projectID: "legacy", events: [.init(id: "cut", revision: 0, action: .cut(pieceID: "pair", physicalIndex: 2))])
         #expect(try ProjectStore(path: path).load(id: "legacy").remaining(pieceID: "pair") == 1)
-        #expect(try before.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier") } == ["v1-projects", "v2-events"])
+        #expect(try before.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations ORDER BY identifier") } == ["v1-projects", "v2-events", "v3-project-metadata"])
     }
 }

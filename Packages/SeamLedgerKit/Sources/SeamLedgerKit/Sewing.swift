@@ -1,3 +1,5 @@
+import Foundation
+
 public enum LedgerError: Error, Equatable {
     case invalidInput, overflow, invalidTransition, reconciliationRequired
 }
@@ -34,17 +36,37 @@ public enum AllowanceComparison: Equatable, Sendable {
     }
 }
 
+public enum PieceMaterial: String, Codable, CaseIterable, Sendable {
+    case outer, lining
+}
+
 public struct Piece: Equatable, Codable, Sendable {
     public let id: String
     /// Physical pieces, regardless of fold instruction. nil means unknown.
     public let requiredCount: Int?
     public let cutOnFold: Bool
-    public init(id: String, requiredCount: Int?, cutOnFold: Bool = false) throws {
-        guard !id.isEmpty, requiredCount.map({ $0 > 0 }) ?? true else { throw LedgerError.invalidInput }
+    public let material: PieceMaterial
+    public let mirrored: Bool
+
+    public init(id: String, requiredCount: Int?, cutOnFold: Bool = false,
+                material: PieceMaterial = .outer, mirrored: Bool = false) throws {
+        guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              requiredCount.map({ $0 > 0 }) ?? true,
+              !mirrored || requiredCount == 2 else { throw LedgerError.invalidInput }
         self.id = id; self.requiredCount = requiredCount; self.cutOnFold = cutOnFold
+        self.material = material; self.mirrored = mirrored
     }
     public static func mirroredPair(id: String, cutOnFold: Bool = false) throws -> Self {
-        try Self(id: id, requiredCount: 2, cutOnFold: cutOnFold)
+        try Self(id: id, requiredCount: 2, cutOnFold: cutOnFold, mirrored: true)
+    }
+    private enum CodingKeys: String, CodingKey { case id, requiredCount, cutOnFold, material, mirrored }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(id: container.decode(String.self, forKey: .id),
+                      requiredCount: container.decodeIfPresent(Int.self, forKey: .requiredCount),
+                      cutOnFold: container.decode(Bool.self, forKey: .cutOnFold),
+                      material: container.decodeIfPresent(PieceMaterial.self, forKey: .material) ?? .outer,
+                      mirrored: container.decodeIfPresent(Bool.self, forKey: .mirrored) ?? false)
     }
 }
 
@@ -88,7 +110,8 @@ public struct ProjectDefinition: Equatable, Codable, Sendable {
         guard Set(pieces.map(\.id)).count == pieces.count,
               Set(edges.map(\.id)).count == edges.count,
               Set(seams.map(\.id)).count == seams.count else { throw LedgerError.invalidInput }
-        for p in pieces { _ = try Piece(id: p.id, requiredCount: p.requiredCount, cutOnFold: p.cutOnFold) }
+        for p in pieces { _ = try Piece(id: p.id, requiredCount: p.requiredCount, cutOnFold: p.cutOnFold,
+                                material: p.material, mirrored: p.mirrored) }
         for e in edges {
             guard !e.id.isEmpty, pieces.contains(where: { $0.id == e.pieceID }),
                   e.allowanceDenominator > 0 else { throw LedgerError.invalidInput }
@@ -139,6 +162,29 @@ public struct SewingProject: Sendable {
     public func remaining(pieceID: String) throws -> Int? {
         guard let piece = definition.pieces.first(where: { $0.id == pieceID }) else { throw LedgerError.invalidInput }
         return piece.requiredCount.map { $0 - (cuts[pieceID]?.count ?? 0) }
+    }
+    public func completedCuts(pieceID: String) -> Set<Int> {
+        cuts[pieceID, default: []]
+    }
+    public struct PieceProgress: Equatable, Sendable {
+        public let piece: Piece
+        public let cutCount: Int
+        public let remainingCount: Int?
+        public let isComplete: Bool
+    }
+    public var pieceProgressList: [PieceProgress] {
+        definition.pieces.map { piece in
+            let count = cuts[piece.id]?.count ?? 0
+            let rem = piece.requiredCount.map { max(0, $0 - count) }
+            let complete = piece.requiredCount.map { count >= $0 } ?? false
+            return PieceProgress(piece: piece, cutCount: count, remainingCount: rem, isComplete: complete)
+        }
+    }
+    public var summary: (totalPieces: Int, completedPieces: Int, hasUnknownCounts: Bool) {
+        let list = pieceProgressList
+        let unknown = list.contains(where: { $0.piece.requiredCount == nil })
+        let complete = list.filter(\.isComplete).count
+        return (totalPieces: list.count, completedPieces: complete, hasUnknownCounts: unknown)
     }
     public mutating func apply(_ event: SewingEvent) throws {
         guard !event.id.isEmpty, !history.contains(where: { $0.id == event.id }) else { throw LedgerError.invalidTransition }
