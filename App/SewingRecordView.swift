@@ -54,8 +54,9 @@ struct SewingRecordView: View {
         }
         .task(id: photoItem) {
             guard let item = photoItem else { return }
+            photo = nil
             loadingPhoto = true
-            defer { loadingPhoto = false }
+            defer { if photoItem == item { loadingPhoto = false } }
             do {
                 guard let data = try await item.loadTransferable(type: Data.self),
                       !data.isEmpty, data.count <= 10_000_000, UIImage(data: data) != nil else {
@@ -67,8 +68,10 @@ struct SewingRecordView: View {
             } catch is CancellationError {
                 // A newly picked item replaces this request.
             } catch {
-                photo = nil
-                self.error = "Photo could not be loaded. Pick an image up to 10 MB. \(error.localizedDescription)"
+                if photoItem == item {
+                    photo = nil
+                    self.error = "Photo could not be loaded. Pick an image up to 10 MB. \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -98,7 +101,11 @@ struct SewingRecordView: View {
                     Text("\(edge.id) (\(edge.pieceID))")
                     allowanceText(edge)
                     Button("Remove edge \(edge.id) and its seams", role: .destructive) {
-                        perform { try append(.removeEdge(edgeID: edge.id)) }
+                        perform {
+                            try append(.removeEdge(edgeID: edge.id))
+                            if firstEdge == edge.id { firstEdge = "" }
+                            if secondEdge == edge.id { secondEdge = "" }
+                        }
                     }
                     .frame(minHeight: 44)
                 }
@@ -224,6 +231,7 @@ struct SewingRecordView: View {
             entry("After (optional)", text: $after, id: "alteration.after")
             unitPicker("Measurement unit", selection: $measurementUnit)
             PhotosPicker("Pick optional photo (up to 10 MB)", selection: $photoItem, matching: .images)
+                .disabled(loadingPhoto)
             if loadingPhoto { ProgressView("Loading selected photo") }
             if photo != nil {
                 Text("Selected photo ready; saved only with the note")

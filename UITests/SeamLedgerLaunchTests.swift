@@ -47,7 +47,9 @@ final class SeamLedgerLaunchTests: XCTestCase {
             let unitButton = app.segmentedControls["edge.unit"].buttons[unit]
             reveal(unitButton, in: app)
             unitButton.tap()
-            app.buttons["edge.add"].tap()
+            let addEdge = app.buttons["edge.add"]
+            reveal(addEdge, in: app)
+            addEdge.tap()
         }
         for (seam, second, comparison) in [
             ("Missing", "B", "Allowance unspecified; comparison unavailable"),
@@ -69,6 +71,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         pressed.tap()
         let sewn = app.buttons["seam.sewn.Equal"]
         XCTAssertEqual(sewn.label, "Mark sewn Equal")
+        reveal(sewn, in: app)
         sewn.tap()
         sewn.tap()
         XCTAssertEqual(sewn.label, "Mark sewn Equal")
