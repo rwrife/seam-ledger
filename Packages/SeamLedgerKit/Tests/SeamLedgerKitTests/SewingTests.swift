@@ -1,7 +1,67 @@
+import Foundation
 import Testing
 @testable import SeamLedgerKit
 
 @Suite struct SewingTests {
+    @Test func exactUserEnteredMeasurements() throws {
+        #expect(try Allowance.parse("  ", unit: .inch) == nil)
+        #expect(try Allowance.parse("5/8", unit: .inch) == Allowance.parse("15.875", unit: .millimetre))
+        #expect(try Allowance.parse("1.0", unit: .centimetre) == Allowance.parse("10", unit: .millimetre))
+        #expect(try Allowance.parse("0", unit: .inch) == Allowance(0, unit: .millimetre))
+        for invalid in ["1/0", "-1", "1.2.3", "1//2", "1e2", ".5", "1.", "NaN"] {
+            #expect(throws: LedgerError.invalidInput) { try Allowance.parse(invalid, unit: .inch) }
+        }
+        #expect(throws: LedgerError.overflow) { try Allowance.parse("1.0000000000000000000", unit: .inch) }
+        let value = try Allowance(5, denominator: 8, unit: .inch)
+        #expect(try JSONDecoder().decode(Allowance.self, from: JSONEncoder().encode(value)) == value)
+        #expect(throws: LedgerError.invalidInput) {
+            try JSONDecoder().decode(Allowance.self, from: Data(#"{"numerator":1,"denominator":0}"#.utf8))
+        }
+    }
+
+    @Test func edgeRemovalCleansOnlyRelatedProgressAndPreservesCutsAndNotes() throws {
+        var project = try SewingProject(definition: ProjectDefinition(pieces: [Piece(id: "p", requiredCount: 1)]))
+        func event(_ id: String, _ action: SewingAction) -> SewingEvent {
+            SewingEvent(id: id, revision: 0, action: action)
+        }
+        try project.apply(event("cut", .cut(pieceID: "p", physicalIndex: 1)))
+        for id in ["a", "b", "c"] {
+            try project.apply(event(id, .addEdge(Edge(id: id, pieceID: "p", allowance: nil))))
+        }
+        try project.apply(event("s", .linkSeam(Seam(id: "s", firstEdgeID: "a", secondEdgeID: "b"))))
+        try project.apply(event("t", .linkSeam(Seam(id: "t", firstEdgeID: "b", secondEdgeID: "c"))))
+        try project.apply(event("sew", .sewn(seamID: "s")))
+        try project.apply(event("press", .pressed(seamID: "s")))
+        try project.apply(event("other", .pressed(seamID: "t")))
+        let note = try AlterationNote(id: "note", text: "Shorten hem", before: Allowance(3, unit: .centimetre),
+                                      after: Allowance(2, unit: .centimetre))
+        try project.apply(event("note", .addAlteration(note)))
+        let historyCount = project.history.count
+        #expect(throws: LedgerError.invalidInput) {
+            try project.apply(event("invalid", .linkSeam(Seam(id: "bad", firstEdgeID: "a", secondEdgeID: "missing"))))
+        }
+        #expect(project.history.count == historyCount)
+        #expect(throws: LedgerError.invalidInput) {
+            try project.apply(event("duplicate", .addEdge(Edge(id: "a", pieceID: "p", allowance: nil))))
+        }
+        try project.apply(event("remove", .removeEdge(edgeID: "a")))
+        #expect(project.definition.seams.map(\.id) == ["t"])
+        #expect(project.sewn.isEmpty)
+        #expect(project.pressed == ["t"])
+        #expect(project.completedCuts(pieceID: "p") == [1])
+        #expect(project.alterations == [note])
+        try project.apply(event("relink", .linkSeam(Seam(id: "s", firstEdgeID: "b", secondEdgeID: "c"))))
+        #expect(!project.pressed.contains("s") && !project.sewn.contains("s"))
+        try project.apply(event("unlink", .removeSeam(seamID: "t")))
+        #expect(project.pressed.isEmpty)
+        #expect(throws: LedgerError.invalidInput) { try project.apply(event("gone", .pressed(seamID: "t"))) }
+        #expect(throws: LedgerError.invalidTransition) { try project.apply(event("dup-note", .addAlteration(note))) }
+        try project.apply(event("reconcile", .reconcile(ProjectDefinition(pieces: []))))
+        #expect(project.alterations == [note])
+        #expect(throws: LedgerError.invalidInput) { try AlterationNote(id: "empty", text: "  ") }
+        #expect(throws: LedgerError.invalidInput) { try AlterationNote(id: "photo", text: "Hem", photo: Data()) }
+    }
+
     @Test func exactAllowances() throws {
         let mm = try Allowance(10, unit: .millimetre)
         #expect(try mm == Allowance(1, unit: .centimetre))

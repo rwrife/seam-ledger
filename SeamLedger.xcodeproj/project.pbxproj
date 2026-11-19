@@ -6,6 +6,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000108 /* SewingRecordView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000208 /* SewingRecordView.swift */; };
 		A10000000000000000000101 /* SeamLedgerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000201 /* SeamLedgerApp.swift */; };
 		A10000000000000000000102 /* BootstrapHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000202 /* BootstrapHomeView.swift */; };
 		A10000000000000000000103 /* SeamLedgerLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000203 /* SeamLedgerLaunchTests.swift */; };
@@ -25,6 +26,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A10000000000000000000208 /* SewingRecordView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SewingRecordView.swift; sourceTree = "<group>"; };
 		A10000000000000000000201 /* SeamLedgerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamLedgerApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000202 /* BootstrapHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BootstrapHomeView.swift; sourceTree = "<group>"; };
 		A10000000000000000000203 /* SeamLedgerLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeamLedgerLaunchTests.swift; sourceTree = "<group>"; };
@@ -68,6 +70,7 @@
 			children = (
 				A10000000000000000000201 /* SeamLedgerApp.swift */,
 				A10000000000000000000202 /* BootstrapHomeView.swift */,
+				A10000000000000000000208 /* SewingRecordView.swift */,
 				A10000000000000000000206 /* PrivacyInfo.xcprivacy */,
 				A10000000000000000000207 /* Assets.xcassets */,
 			);
@@ -176,6 +179,7 @@
 			files = (
 				A10000000000000000000101 /* SeamLedgerApp.swift in Sources */,
 				A10000000000000000000102 /* BootstrapHomeView.swift in Sources */,
+				A10000000000000000000108 /* SewingRecordView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

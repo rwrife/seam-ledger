@@ -5,6 +5,40 @@ import SeamLedgerKit
 @testable import SeamLedgerStore
 
 @Suite struct ProjectStoreTests {
+    @Test func alterationAndEdgeChangesReplayAcrossReopens() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("alterations.sqlite").path
+        let store = try ProjectStore(path: path)
+        try store.create(id: "p", definition: definition())
+        let note = try AlterationNote(id: "hem", text: "Shortened by hand after fitting",
+                                      before: Allowance(2, unit: .inch), after: Allowance(45, unit: .millimetre),
+                                      photo: Data([137, 80, 78, 71]))
+        try store.append(projectID: "p", events: [
+            .init(id: "cut", revision: 0, action: .cut(pieceID: "pair", physicalIndex: 1)),
+            .init(id: "note", revision: 0, action: .addAlteration(note)),
+            .init(id: "edge", revision: 0, action: .addEdge(Edge(id: "new", pieceID: "pair",
+                                                            allowance: Allowance(10, unit: .millimetre)))),
+            .init(id: "link", revision: 0, action: .linkSeam(Seam(id: "new-seam", firstEdgeID: "a", secondEdgeID: "new"))),
+            .init(id: "sew", revision: 0, action: .sewn(seamID: "new-seam")),
+            .init(id: "press", revision: 0, action: .pressed(seamID: "new-seam")),
+            .init(id: "undo", revision: 0, action: .undoSewn(seamID: "new-seam"))
+        ])
+        let reopened = try ProjectStore(path: path)
+        let loaded = try reopened.load(id: "p")
+        #expect(loaded.alterations == [note])
+        #expect(loaded.sewn.isEmpty && loaded.pressed == ["new-seam"])
+        #expect(try loaded.definition.comparison(for: "new-seam") == .equal)
+        try reopened.append(projectID: "p", events: [
+            .init(id: "remove", revision: 0, action: .removeEdge(edgeID: "new"))
+        ])
+        let final = try ProjectStore(path: path).load(id: "p")
+        #expect(!final.definition.seams.contains(where: { $0.id == "new-seam" }))
+        #expect(final.pressed.isEmpty)
+        #expect(final.completedCuts(pieceID: "pair") == [1])
+        #expect(final.alterations == [note])
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)

@@ -20,6 +20,7 @@ struct BootstrapHomeView: View {
     @State private var fold = false
     @State private var importing = false
     @State private var showingReference = false
+    @State private var showingSewing = false
     @FocusState private var pieceNameFocused: Bool
     @State private var error: String?
     @State private var pendingDefinition: ProjectDefinition?
@@ -101,6 +102,12 @@ struct BootstrapHomeView: View {
         VStack(alignment: .leading, spacing: 18) {
             let info = projects.first(where: { $0.id == id })
             Text(info?.name ?? "Project").font(.title2.bold())
+            Button("Seams and alterations") { showingSewing = true }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("workspace.sewing")
+                .sheet(isPresented: $showingSewing) {
+                    SewingRecordView(project: $project, append: append)
+                }
             Button("Import owned PDF") {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-UITestPDF") {

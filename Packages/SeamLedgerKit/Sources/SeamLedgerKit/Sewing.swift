@@ -5,7 +5,7 @@ public enum LedgerError: Error, Equatable {
 }
 
 /// Nonnegative, reduced rational micrometres. No floating point rounding.
-public struct Allowance: Equatable, Sendable {
+public struct Allowance: Equatable, Codable, Sendable {
     public enum Unit: Int64, Sendable { case micrometre = 1, millimetre = 1_000, centimetre = 10_000, inch = 25_400 }
     public let numerator: Int64
     public let denominator: Int64
@@ -25,6 +25,45 @@ public struct Allowance: Equatable, Sendable {
         guard !product.overflow else { throw LedgerError.overflow }
         self.numerator = product.partialValue
         self.denominator = d / scaleCommon
+    }
+
+    private enum CodingKeys: String, CodingKey { case numerator, denominator }
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(container.decode(Int64.self, forKey: .numerator),
+                      denominator: container.decode(Int64.self, forKey: .denominator), unit: .micrometre)
+    }
+
+    /// Accept an integer, decimal, or fraction without passing through floating point.
+    public static func parse(_ text: String, unit: Unit) throws -> Allowance? {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { return nil }
+        func integer(_ value: Substring) throws -> Int64 {
+            guard !value.isEmpty, value.allSatisfy({ ("0"..."9").contains(String($0)) }),
+                  let number = Int64(value) else { throw LedgerError.invalidInput }
+            return number
+        }
+        if text.contains("/") {
+            let parts = text.split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2 else { throw LedgerError.invalidInput }
+            return try Allowance(integer(parts[0]), denominator: integer(parts[1]), unit: unit)
+        }
+        let parts = text.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count <= 2 else { throw LedgerError.invalidInput }
+        if parts.count == 1 { return try Allowance(integer(parts[0]), unit: unit) }
+        _ = try integer(parts[0])
+        _ = try integer(parts[1])
+        var scale: Int64 = 1
+        for _ in parts[1] {
+            let next = scale.multipliedReportingOverflow(by: 10)
+            guard !next.overflow else { throw LedgerError.overflow }
+            scale = next.partialValue
+        }
+        return try Allowance(integer(Substring(parts.joined())), denominator: scale, unit: unit)
+    }
+
+    public var recordedDescription: String {
+        "\(numerator)\(denominator == 1 ? "" : "/\(denominator)") micrometres"
     }
 }
 
@@ -98,6 +137,27 @@ public struct Seam: Equatable, Codable, Sendable {
     }
 }
 
+public struct AlterationNote: Equatable, Codable, Sendable {
+    public let id: String
+    public let text: String
+    public let before: Allowance?
+    public let after: Allowance?
+    /// Only user-picked image data; stored with the event in the local database.
+    public let photo: Data?
+
+    public init(id: String, text: String, before: Allowance? = nil,
+                after: Allowance? = nil, photo: Data? = nil) throws {
+        guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              photo.map({ !$0.isEmpty && $0.count <= 10_000_000 }) ?? true else { throw LedgerError.invalidInput }
+        self.id = id; self.text = text; self.before = before; self.after = after; self.photo = photo
+    }
+
+    public func validate() throws {
+        _ = try Self(id: id, text: text, before: before, after: after, photo: photo)
+    }
+}
+
 public struct ProjectDefinition: Equatable, Codable, Sendable {
     public let pieces: [Piece]
     public let edges: [Edge]
@@ -113,12 +173,13 @@ public struct ProjectDefinition: Equatable, Codable, Sendable {
         for p in pieces { _ = try Piece(id: p.id, requiredCount: p.requiredCount, cutOnFold: p.cutOnFold,
                                 material: p.material, mirrored: p.mirrored) }
         for e in edges {
-            guard !e.id.isEmpty, pieces.contains(where: { $0.id == e.pieceID }),
+            guard !e.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  pieces.contains(where: { $0.id == e.pieceID }),
                   e.allowanceDenominator > 0 else { throw LedgerError.invalidInput }
             _ = try e.allowance
         }
         for s in seams {
-            guard !s.id.isEmpty, s.firstEdgeID != s.secondEdgeID,
+            guard !s.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, s.firstEdgeID != s.secondEdgeID,
                   edges.contains(where: { $0.id == s.firstEdgeID }),
                   edges.contains(where: { $0.id == s.secondEdgeID }) else { throw LedgerError.invalidInput }
         }
@@ -136,6 +197,9 @@ public enum SewingAction: Equatable, Codable, Sendable {
     case undoCut(pieceID: String, physicalIndex: Int)
     case sewn(seamID: String), undoSewn(seamID: String)
     case pressed(seamID: String), undoPressed(seamID: String)
+    case addEdge(Edge), removeEdge(edgeID: String)
+    case linkSeam(Seam), removeSeam(seamID: String)
+    case addAlteration(AlterationNote)
     /// Explicit reconciliation resets all progress; the immutable history remains.
     case reconcile(ProjectDefinition)
 }
@@ -156,6 +220,7 @@ public struct SewingProject: Sendable {
     private var cuts: [String: Set<Int>] = [:]
     public private(set) var sewn: Set<String> = []
     public private(set) var pressed: Set<String> = []
+    public private(set) var alterations: [AlterationNote] = []
     public init(definition: ProjectDefinition) throws {
         try definition.validate(); self.definition = definition
     }
@@ -190,6 +255,29 @@ public struct SewingProject: Sendable {
         guard !event.id.isEmpty, !history.contains(where: { $0.id == event.id }) else { throw LedgerError.invalidTransition }
         guard event.revision == revision else { throw LedgerError.reconciliationRequired }
         switch event.action {
+        case let .addEdge(edge):
+            definition = try ProjectDefinition(pieces: definition.pieces, edges: definition.edges + [edge],
+                                               seams: definition.seams)
+        case let .removeEdge(id):
+            guard definition.edges.contains(where: { $0.id == id }) else { throw LedgerError.invalidInput }
+            let seams = definition.seams.filter { $0.firstEdgeID != id && $0.secondEdgeID != id }
+            let updated = try ProjectDefinition(pieces: definition.pieces,
+                                               edges: definition.edges.filter { $0.id != id }, seams: seams)
+            let retained = Set(seams.map(\.id))
+            definition = updated
+            sewn.formIntersection(retained); pressed.formIntersection(retained)
+        case let .linkSeam(seam):
+            definition = try ProjectDefinition(pieces: definition.pieces, edges: definition.edges,
+                                               seams: definition.seams + [seam])
+        case let .removeSeam(id):
+            guard definition.seams.contains(where: { $0.id == id }) else { throw LedgerError.invalidInput }
+            definition = try ProjectDefinition(pieces: definition.pieces, edges: definition.edges,
+                                               seams: definition.seams.filter { $0.id != id })
+            sewn.remove(id); pressed.remove(id)
+        case let .addAlteration(note):
+            try note.validate()
+            guard !alterations.contains(where: { $0.id == note.id }) else { throw LedgerError.invalidTransition }
+            alterations.append(note)
         case let .cut(id, index), let .undoCut(id, index):
             guard let p = definition.pieces.first(where: { $0.id == id }),
                   let count = p.requiredCount, index > 0, index <= count else { throw LedgerError.invalidInput }
