@@ -3,8 +3,19 @@ import XCTest
 final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        for _ in 0..<12 where !element.isHittable { app.swipeUp() }
-        for _ in 0..<24 where !element.isHittable { app.swipeDown() }
+        let visible = app.frame.insetBy(dx: 0, dy: 100)
+        var previousFrame: CGRect?
+        for _ in 0..<20 {
+            if element.exists {
+                let frame = element.frame
+                if element.isHittable && (visible.contains(frame) || frame == previousFrame) { return }
+                previousFrame = frame
+                if frame.midY < visible.midY { app.swipeDown() }
+                else { app.swipeUp() }
+            } else {
+                app.swipeUp()
+            }
+        }
         XCTAssertTrue(element.isHittable, app.debugDescription)
     }
 
@@ -18,11 +29,12 @@ final class SeamLedgerLaunchTests: XCTestCase {
     }
 
     @MainActor
-    private func choose(_ value: String, id: String, in app: XCUIApplication) {
+    private func choose(_ value: String, id: String, in app: XCUIApplication) throws {
         let picker = app.buttons[id]
         reveal(picker, in: app)
         picker.tap()
-        app.buttons[value].tap()
+        let option = app.buttons[value]
+        try XCTUnwrap(option.waitForExistence(timeout: 10) ? option : nil, app.debugDescription).tap()
     }
 
     @MainActor
@@ -39,7 +51,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let sewing = app.buttons["workspace.sewing"]
         reveal(sewing, in: app)
         sewing.tap()
-        choose("Panel", id: "edge.piece", in: app)
+        try choose("Panel", id: "edge.piece", in: app)
         for (edge, value, unit) in [("A", "10", "mm"), ("B", "", "mm"),
                                     ("C", "1", "cm"), ("D", "5/8", "inch")] {
             enter(edge, id: "edge.name", in: app)
@@ -57,8 +69,8 @@ final class SeamLedgerLaunchTests: XCTestCase {
             ("Different", "D", "Warning: recorded allowances differ")
         ] {
             enter(seam, id: "seam.name", in: app)
-            choose("A", id: "seam.first", in: app)
-            choose(second, id: "seam.second", in: app)
+            try choose("A", id: "seam.first", in: app)
+            try choose(second, id: "seam.second", in: app)
             let link = app.buttons["seam.link"]
             reveal(link, in: app)
             link.tap()

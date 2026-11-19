@@ -118,6 +118,8 @@ struct SewingRecordView: View {
                     Text("Choose piece").tag("")
                     ForEach(current.definition.pieces, id: \.id) { Text($0.id).tag($0.id) }
                 }
+                .pickerStyle(.menu)
+                .frame(minHeight: 44)
                 .accessibilityIdentifier("edge.piece")
                 entry("Edge name (unique in project)", text: $edgeName, id: "edge.name")
                 entry("Allowance (blank, 10, 1.5 or 5/8)", text: $allowance, id: "edge.allowance")
@@ -201,6 +203,8 @@ struct SewingRecordView: View {
             Text("Choose edge").tag("")
             ForEach(edges, id: \.id) { Text($0.id).tag($0.id) }
         }
+        .pickerStyle(.menu)
+        .frame(minHeight: 44)
     }
 
     @ViewBuilder private func comparisonText(_ current: SewingProject, seam: Seam) -> some View {
