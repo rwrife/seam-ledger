@@ -49,7 +49,9 @@ GitHub Actions secret names configured: ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8, A
 
 ## Status and milestones
 
-Native iPhone skeleton (`SeamLedger.xcodeproj`), pure Swift foundation packages and pinned CI are implemented. See [bootstrap evidence](docs/bootstrap-evidence.md) for verified checks versus pending Apple evidence. No cutting/sewing workflow, database, icon, release Action, signed archive or TestFlight build is delivered by this foundation.
+The local cutting table and sewing/alteration workspace are implemented on the native iPhone skeleton (`SeamLedger.xcodeproj`) with exact Swift domain comparisons and an event-backed SQLite store. See [bootstrap evidence](docs/bootstrap-evidence.md) for foundation evidence. No icon, release Action, signed archive or TestFlight build is delivered.
+
+Open **Seams and alterations** inside a project to name edges, choose their pieces, and enter optional allowances as integers, decimals or fractions in mm, cm or inches. Both seam allowances are displayed in exact normalized micrometres; missing remains unspecified and differences are warnings about user entries only. Sewn and pressed can each be undone independently. Removing an edge also removes its linked seams and their current progress, without resetting cuts or deleting history. Alteration notes survive piece reconciliation; optional before/after dimensions and selected photos (up to 10 MB per image) are stored locally with the note. Photos use the system picker, never the camera or body inference.
 
 1. #1 Native skeleton and CI (Apple evidence required before completion).
 2. #2 Measurement/count domain and persistence.

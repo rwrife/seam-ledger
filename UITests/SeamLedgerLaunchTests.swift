@@ -2,6 +2,101 @@ import XCTest
 
 final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
+    private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
+        for _ in 0..<12 where !element.isHittable { app.swipeUp() }
+        for _ in 0..<24 where !element.isHittable { app.swipeDown() }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
+    }
+
+    @MainActor
+    private func enter(_ value: String, id: String, in app: XCUIApplication) {
+        let field = app.textFields[id]
+        reveal(field, in: app)
+        field.tap()
+        field.typeText(value)
+        app.keyboards.buttons["Done"].tap()
+    }
+
+    @MainActor
+    private func choose(_ value: String, id: String, in app: XCUIApplication) {
+        let picker = app.buttons[id]
+        reveal(picker, in: app)
+        picker.tap()
+        app.buttons[value].tap()
+    }
+
+    @MainActor
+    func testAllowancesUndoAndPersistedAlteration() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let name = "Seams-\(UUID().uuidString.prefix(8))"
+        enter(name, id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        enter("Panel", id: "piece.name", in: app)
+        let addPiece = app.buttons["piece.add"]
+        reveal(addPiece, in: app)
+        addPiece.tap()
+        let sewing = app.buttons["workspace.sewing"]
+        reveal(sewing, in: app)
+        sewing.tap()
+        choose("Panel", id: "edge.piece", in: app)
+        for (edge, value, unit) in [("A", "10", "mm"), ("B", "", "mm"),
+                                    ("C", "1", "cm"), ("D", "5/8", "inch")] {
+            enter(edge, id: "edge.name", in: app)
+            if !value.isEmpty { enter(value, id: "edge.allowance", in: app) }
+            let unitButton = app.segmentedControls["edge.unit"].buttons[unit]
+            reveal(unitButton, in: app)
+            unitButton.tap()
+            app.buttons["edge.add"].tap()
+        }
+        for (seam, second, comparison) in [
+            ("Missing", "B", "Allowance unspecified; comparison unavailable"),
+            ("Equal", "C", "Recorded allowances equal"),
+            ("Different", "D", "Warning: recorded allowances differ")
+        ] {
+            enter(seam, id: "seam.name", in: app)
+            choose("A", id: "seam.first", in: app)
+            choose(second, id: "seam.second", in: app)
+            let link = app.buttons["seam.link"]
+            reveal(link, in: app)
+            link.tap()
+            let result = app.staticTexts["seam.comparison.\(seam)"]
+            reveal(result, in: app)
+            XCTAssertEqual(result.label, comparison)
+        }
+        let pressed = app.buttons["seam.pressed.Equal"]
+        reveal(pressed, in: app)
+        pressed.tap()
+        let sewn = app.buttons["seam.sewn.Equal"]
+        XCTAssertEqual(sewn.label, "Mark sewn Equal")
+        sewn.tap()
+        sewn.tap()
+        XCTAssertEqual(sewn.label, "Mark sewn Equal")
+        XCTAssertEqual(pressed.label, "Undo pressed Equal")
+        enter("Shortened hem by hand", id: "alteration.note", in: app)
+        enter("20", id: "alteration.before", in: app)
+        enter("15", id: "alteration.after", in: app)
+        let save = app.buttons["alteration.save"]
+        reveal(save, in: app)
+        save.tap()
+        XCTAssertFalse(app.staticTexts["sewing.error"].exists, app.debugDescription)
+        app.terminate()
+        app.launch()
+        app.buttons[name].tap()
+        app.buttons["workspace.sewing"].tap()
+        let persisted = app.staticTexts["Shortened hem by hand"]
+        reveal(persisted, in: app)
+        XCTAssertTrue(persisted.exists)
+        XCTAssertTrue(app.staticTexts["Before: 20000 micrometres"].exists)
+        XCTAssertTrue(app.staticTexts["After: 15000 micrometres"].exists)
+        reveal(pressed, in: app)
+        XCTAssertEqual(pressed.label, "Undo pressed Equal")
+        pressed.tap()
+        XCTAssertEqual(pressed.label, "Mark pressed Equal")
+        XCTAssertEqual(sewn.label, "Mark sewn Equal")
+    }
+
+    @MainActor
     func testCreateMirroredCutUndoAfterRelaunch() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-UITestPDF"]
