@@ -1,5 +1,6 @@
 import PhotosUI
 import SeamLedgerKit
+import struct SeamLedgerKit.Edge
 import SwiftUI
 
 struct SewingRecordView: View {
@@ -123,7 +124,7 @@ struct SewingRecordView: View {
                 unitPicker("Allowance unit", selection: $unit).accessibilityIdentifier("edge.unit")
                 Button("Add edge") {
                     perform {
-                        let edge = SeamLedgerKit.Edge(id: edgeName.trimmingCharacters(in: .whitespacesAndNewlines),
+                        let edge = Edge(id: edgeName.trimmingCharacters(in: .whitespacesAndNewlines),
                                         pieceID: pieceID, allowance: try Allowance.parse(allowance, unit: unit))
                         try append(.addEdge(edge))
                         edgeName = ""; allowance = ""; editing = false
@@ -136,7 +137,7 @@ struct SewingRecordView: View {
         }
     }
 
-    @ViewBuilder private func allowanceText(_ edge: SeamLedgerKit.Edge) -> some View {
+    @ViewBuilder private func allowanceText(_ edge: Edge) -> some View {
         switch Result(catching: { try edge.allowance }) {
         case let .success(value): Text("Allowance: \(value?.recordedDescription ?? "unspecified")")
         case .failure: Text("Invalid recorded allowance").foregroundStyle(.red)
@@ -195,7 +196,7 @@ struct SewingRecordView: View {
         }
     }
 
-    private func edgePicker(_ title: String, selection: Binding<String>, edges: [SeamLedgerKit.Edge]) -> some View {
+    private func edgePicker(_ title: String, selection: Binding<String>, edges: [Edge]) -> some View {
         Picker(title, selection: selection) {
             Text("Choose edge").tag("")
             ForEach(edges, id: \.id) { Text($0.id).tag($0.id) }
