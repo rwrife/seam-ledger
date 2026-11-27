@@ -189,4 +189,16 @@ final class SeamLedgerLaunchTests: XCTestCase {
         reveal(note, in: app)
         XCTAssertTrue(note.isHittable)
     }
+
+    @MainActor
+    func testWorkspacePassesAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestPDF"]
+        app.launch()
+        enter("Accessibility audit", id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        app.buttons["reference.import"].tap()
+        XCTAssertTrue(app.staticTexts["reference.page"].waitForExistence(timeout: 10))
+        try app.performAccessibilityAudit()
+    }
 }
