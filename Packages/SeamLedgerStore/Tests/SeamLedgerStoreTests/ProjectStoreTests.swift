@@ -5,6 +5,41 @@ import SeamLedgerKit
 @testable import SeamLedgerStore
 
 @Suite struct ProjectStoreTests {
+    @Test func snapshotPreservesOriginalDefinitionAndOrderedPhotoHistory() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try ProjectStore(path: dir.appendingPathComponent("snapshot.sqlite").path)
+        let original = try definition()
+        try store.create(id: "p", name: "Project", definition: original)
+        let reference = UUID().uuidString + ".pdf"
+        try store.setReferenceFile(reference, projectID: "p")
+        let note = try AlterationNote(id: "note", text: "Fitting", photo: Data([1, 2, 3]))
+        let changed = try ProjectDefinition(pieces: [Piece(id: "new", requiredCount: 1)])
+        let events: [SewingEvent] = [
+            .init(id: "note", revision: 0, action: .addAlteration(note)),
+            .init(id: "reconcile", revision: 0, action: .reconcile(changed)),
+            .init(id: "cut", revision: 1, action: .cut(pieceID: "new", physicalIndex: 1))
+        ]
+        try store.append(projectID: "p", events: events)
+        let snapshot = try #require(store.snapshot().first)
+        #expect(snapshot.id == "p" && snapshot.name == "Project")
+        #expect(snapshot.referenceFile == reference)
+        #expect(snapshot.definition == original)
+        #expect(snapshot.events == events)
+    }
+
+    @Test func snapshotRejectsInconsistentEventIdentity() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("corrupt.sqlite").path
+        let store = try ProjectStore(path: path)
+        try store.create(id: "p", definition: definition())
+        try store.append(projectID: "p", events: [.init(id: "cut", revision: 0, action: .cut(pieceID: "pair", physicalIndex: 1))])
+        let inspection = try DatabaseQueue(path: path)
+        try inspection.write { try $0.execute(sql: "UPDATE events SET eventID = 'different'") }
+        #expect(throws: LedgerError.invalidInput) { try store.snapshot() }
+    }
+
     @Test func alterationAndEdgeChangesReplayAcrossReopens() throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

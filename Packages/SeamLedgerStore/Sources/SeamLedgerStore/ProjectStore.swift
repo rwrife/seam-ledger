@@ -37,6 +37,42 @@ public final class ProjectStore: Sendable {
         public let referenceFile: String?
     }
 
+    /// Database contents only. Reference files must be copied separately for a backup.
+    public struct ProjectSnapshot: Equatable, Sendable {
+        public let id: String
+        public let name: String
+        public let referenceFile: String?
+        public let definition: ProjectDefinition
+        public let events: [SewingEvent]
+    }
+
+    public func snapshot() throws -> [ProjectSnapshot] {
+        try database.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, name, referenceFile, definition FROM projects ORDER BY id").map { row in
+                let id: String = row["id"]
+                let name: String = row["name"]
+                let referenceFile: String? = row["referenceFile"]
+                let data: Data = row["definition"]
+                guard !id.isEmpty, !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      referenceFile.map(Self.isValidReferenceFile) ?? true else { throw LedgerError.invalidInput }
+                let definition = try JSONDecoder().decode(ProjectDefinition.self, from: data)
+                var project = try SewingProject(definition: definition)
+                let rows = try Row.fetchAll(db, sql: "SELECT eventID, payload FROM events WHERE projectID = ? ORDER BY sequence", arguments: [id])
+                var events: [SewingEvent] = []
+                for eventRow in rows {
+                    let eventID: String = eventRow["eventID"]
+                    let payload: Data = eventRow["payload"]
+                    let event = try JSONDecoder().decode(SewingEvent.self, from: payload)
+                    guard event.id == eventID else { throw LedgerError.invalidInput }
+                    try project.apply(event)
+                    events.append(event)
+                }
+                return ProjectSnapshot(id: id, name: name, referenceFile: referenceFile,
+                                       definition: definition, events: events)
+            }
+        }
+    }
+
     public func projects() throws -> [ProjectInfo] {
         try database.read { db in
             try Row.fetchAll(db, sql: "SELECT id, name, referenceFile FROM projects ORDER BY name, id")
@@ -45,12 +81,15 @@ public final class ProjectStore: Sendable {
     }
 
     public func setReferenceFile(_ filename: String, projectID: String) throws {
-        guard filename.hasSuffix(".pdf"),
-              UUID(uuidString: String(filename.dropLast(4))) != nil else { throw LedgerError.invalidInput }
+        guard Self.isValidReferenceFile(filename) else { throw LedgerError.invalidInput }
         try database.write { db in
             try db.execute(sql: "UPDATE projects SET referenceFile = ? WHERE id = ?", arguments: [filename, projectID])
             guard db.changesCount == 1 else { throw LedgerError.invalidInput }
         }
+    }
+
+    private static func isValidReferenceFile(_ filename: String) -> Bool {
+        filename.hasSuffix(".pdf") && UUID(uuidString: String(filename.dropLast(4))) != nil
     }
 
     public func create(id: String, name: String, definition: ProjectDefinition) throws {
