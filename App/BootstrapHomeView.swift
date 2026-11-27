@@ -19,8 +19,8 @@ struct BootstrapHomeView: View {
     @State private var mirrored = false
     @State private var fold = false
     @State private var importing = false
-    @State private var showingReference = false
     @State private var showingSewing = false
+    @State private var referencePages: [String: Int] = [:]
     @FocusState private var pieceNameFocused: Bool
     @State private var error: String?
     @State private var pendingDefinition: ProjectDefinition?
@@ -31,23 +31,45 @@ struct BootstrapHomeView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let error {
-                        Text(error).foregroundStyle(.red).accessibilityIdentifier("workspace.error")
+            Group {
+                if let project, let selectedID {
+                    SewingWorkspaceLayout {
+                        if let file = projects.first(where: { $0.id == selectedID })?.referenceFile {
+                            ReferencePanel(url: referenceDirectory.appending(path: file), pageIndex: Binding(
+                                get: { referencePages[selectedID, default: 0] },
+                                set: { referencePages[selectedID] = $0 }
+                            ))
+                        }
+                    } controls: {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 20) {
+                                errorMessage
+                                if showingSewing {
+                                    Button("Cutting table") { showingSewing = false }
+                                        .frame(minHeight: 44)
+                                        .accessibilityIdentifier("workspace.cutting")
+                                    SewingRecordView(project: $project, append: append)
+                                } else {
+                                    projectPanel(project, id: selectedID)
+                                }
+                            }
+                            .padding(20)
+                        }
                     }
-                    if let project, let selectedID {
-                        projectPanel(project, id: selectedID)
-                    } else {
-                        projectList
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
+                            errorMessage
+                            projectList
+                        }
+                        .padding(20)
                     }
                 }
-                .padding(20)
             }
             .navigationTitle("Seam Ledger")
             .toolbar {
                 if selectedID != nil {
-                    Button("Projects") { selectedID = nil; project = nil }
+                    Button("Projects") { selectedID = nil; project = nil; showingSewing = false }
                         .accessibilityIdentifier("workspace.projects")
                 }
             }
@@ -67,6 +89,12 @@ struct BootstrapHomeView: View {
             }
         }
         .onAppear(perform: openStore)
+    }
+
+    @ViewBuilder private var errorMessage: some View {
+        if let error {
+            Text(error).foregroundStyle(.red).accessibilityIdentifier("workspace.error")
+        }
     }
 
     private var projectList: some View {
@@ -93,6 +121,7 @@ struct BootstrapHomeView: View {
                     load(id)
                 }
             }
+            .frame(minHeight: 44)
             .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("project.create")
         }
@@ -105,9 +134,6 @@ struct BootstrapHomeView: View {
             Button("Seams and alterations") { showingSewing = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("workspace.sewing")
-                .sheet(isPresented: $showingSewing) {
-                    SewingRecordView(project: $project, append: append)
-                }
             Button("Import owned PDF") {
                 #if DEBUG
                 if ProcessInfo.processInfo.arguments.contains("-UITestPDF") {
@@ -117,6 +143,8 @@ struct BootstrapHomeView: View {
                         try renderer.pdfData { context in
                             context.beginPage()
                             "Owned reference".draw(at: CGPoint(x: 20, y: 20), withAttributes: nil)
+                            context.beginPage()
+                            "Second reference page".draw(at: CGPoint(x: 20, y: 20), withAttributes: nil)
                         }.write(to: url, options: .atomic)
                         importReference(.success(url))
                     } catch { self.error = error.localizedDescription }
@@ -160,6 +188,7 @@ struct BootstrapHomeView: View {
             TextField("Named piece", text: $pieceName)
                 .focused($pieceNameFocused)
                 .submitLabel(.done)
+                .frame(minHeight: 44)
                 .accessibilityIdentifier("piece.name")
             Picker("Material", selection: $material) {
                 Text("Outer").tag(PieceMaterial.outer)
@@ -193,25 +222,9 @@ struct BootstrapHomeView: View {
                     pieceName = ""; requiredCount = ""
                 }
             }
+            .frame(minHeight: 44)
             .disabled(pieceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("piece.add")
-            if let file = info?.referenceFile {
-                let url = referenceDirectory.appending(path: file)
-                if FileManager.default.fileExists(atPath: url.path) {
-                    Button("Open owned reference PDF") { pieceNameFocused = false; showingReference = true }
-                        .accessibilityIdentifier("reference.open")
-                        .sheet(isPresented: $showingReference) {
-                            NavigationStack {
-                                PDFKitView(url: url)
-                                    .accessibilityIdentifier("reference.document")
-                                    .navigationTitle("Owned reference")
-                                    .toolbar { Button("Done") { showingReference = false } }
-                            }
-                        }
-                } else {
-                    Text("Reference PDF missing").foregroundStyle(.red)
-                }
-            }
         }
     }
 
@@ -258,20 +271,120 @@ struct BootstrapHomeView: View {
             try data.write(to: target, options: .atomic)
             do { try store.setReferenceFile(filename, projectID: selectedID) }
             catch { try? FileManager.default.removeItem(at: target); throw error }
+            referencePages[selectedID] = 0
             refreshProjects()
         }
     }
 }
 
-private struct PDFKitView: UIViewRepresentable {
+private struct SewingWorkspaceLayout<Reference: View, Controls: View>: View {
+    let reference: Reference
+    let controls: Controls
+
+    init(@ViewBuilder reference: () -> Reference, @ViewBuilder controls: () -> Controls) {
+        self.reference = reference()
+        self.controls = controls()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            reference
+            controls
+        }
+    }
+}
+
+private struct ReferencePanel: View {
     let url: URL
+    @Binding var pageIndex: Int
+    @State private var document: PDFDocument?
+    @State private var showingReference = false
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let document, document.pageCount > 0 {
+                PDFKitView(document: document, pageIndex: $pageIndex)
+                    .frame(height: verticalSizeClass == .compact ? 90 : 160)
+                    .accessibilityLabel("Owned pattern reference")
+                    .accessibilityIdentifier("reference.document")
+                HStack {
+                    Button { pageIndex -= 1 } label: { Image(systemName: "chevron.left") }
+                        .disabled(pageIndex <= 0)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Previous reference page")
+                        .accessibilityIdentifier("reference.previous")
+                    Spacer()
+                    Text("Page \(pageIndex + 1) of \(document.pageCount)")
+                        .accessibilityIdentifier("reference.page")
+                    Spacer()
+                    Button { showingReference = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Open owned reference PDF")
+                        .accessibilityIdentifier("reference.open")
+                    Button { pageIndex += 1 } label: { Image(systemName: "chevron.right") }
+                        .disabled(pageIndex >= document.pageCount - 1)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .accessibilityLabel("Next reference page")
+                        .accessibilityIdentifier("reference.next")
+                }
+                .padding(.horizontal, 20)
+            } else {
+                Text("Reference PDF could not be opened.")
+                    .padding()
+            }
+        }
+        .task(id: url) {
+            document = PDFDocument(url: url)
+            if let document, pageIndex >= document.pageCount { pageIndex = 0 }
+        }
+        .sheet(isPresented: $showingReference) {
+            if let document {
+                NavigationStack {
+                    PDFKitView(document: document, pageIndex: $pageIndex)
+                        .navigationTitle("Owned reference")
+                        .toolbar { Button("Done") { showingReference = false } }
+                }
+            }
+        }
+    }
+}
+
+private struct PDFKitView: UIViewRepresentable {
+    let document: PDFDocument
+    @Binding var pageIndex: Int
+
+    func makeCoordinator() -> Coordinator { Coordinator(pageIndex: $pageIndex) }
+
     func makeUIView(context: Context) -> PDFView {
         let view = PDFView()
         view.autoScales = true
-        view.document = PDFDocument(url: url)
+        view.displayMode = .singlePage
+        view.document = document
+        NotificationCenter.default.addObserver(context.coordinator, selector: #selector(Coordinator.pageChanged(_:)),
+                                               name: .PDFViewPageChanged, object: view)
         return view
     }
-    func updateUIView(_ uiView: PDFView, context: Context) {
-        if uiView.document?.documentURL != url { uiView.document = PDFDocument(url: url) }
+
+    func updateUIView(_ view: PDFView, context: Context) {
+        context.coordinator.pageIndex = $pageIndex
+        if view.document !== document { view.document = document }
+        if let page = document.page(at: pageIndex), view.currentPage !== page { view.go(to: page) }
+    }
+
+    static func dismantleUIView(_ view: PDFView, coordinator: Coordinator) {
+        NotificationCenter.default.removeObserver(coordinator, name: .PDFViewPageChanged, object: view)
+    }
+
+    final class Coordinator: NSObject {
+        var pageIndex: Binding<Int>
+        init(pageIndex: Binding<Int>) { self.pageIndex = pageIndex }
+
+        @objc func pageChanged(_ notification: Notification) {
+            guard let view = notification.object as? PDFView, let document = view.document,
+                  let page = view.currentPage else { return }
+            let index = document.index(for: page)
+            if index != NSNotFound && pageIndex.wrappedValue != index { pageIndex.wrappedValue = index }
+        }
     }
 }

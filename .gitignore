@@ -25,3 +25,4 @@ asc_private/
 *.sqlite-wal
 exports/
 PhotoWork/
+.worktrees/

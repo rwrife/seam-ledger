@@ -6,7 +6,6 @@ import SwiftUI
 struct SewingRecordView: View {
     @Binding var project: SewingProject?
     let append: (SewingAction) throws -> Void
-    @Environment(\.dismiss) private var dismiss
     @State private var error: String?
     @State private var edgeName = ""
     @State private var pieceID = ""
@@ -25,32 +24,23 @@ struct SewingRecordView: View {
     @FocusState private var editing: Bool
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if let error {
-                        Text(error).foregroundStyle(.red).accessibilityIdentifier("sewing.error")
-                    }
-                    Text("Compares your entries only; not a fit or construction safety certification.")
-                    if let project {
-                        edgeEditor(project)
-                        Divider()
-                        seamEditor(project)
-                        Divider()
-                        alterationEditor(project)
-                    }
-                }
-                .padding(20)
+        VStack(alignment: .leading, spacing: 18) {
+            if let error {
+                Text(error).foregroundStyle(.red).accessibilityIdentifier("sewing.error")
             }
-            .navigationTitle("Seams and alterations")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Hide keyboard") { editing = false }
-                }
+            Text("Compares your entries only; not a fit or construction safety certification.")
+            if let project {
+                edgeEditor(project)
+                Divider()
+                seamEditor(project)
+                Divider()
+                alterationEditor(project)
+            }
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Hide keyboard") { editing = false }
             }
         }
         .task(id: photoItem) {
@@ -91,6 +81,7 @@ struct SewingRecordView: View {
             .focused($editing)
             .submitLabel(.done)
             .onSubmit { editing = false }
+            .frame(minHeight: 44)
             .accessibilityIdentifier(id)
     }
 
