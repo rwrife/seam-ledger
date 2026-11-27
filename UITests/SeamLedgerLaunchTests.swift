@@ -181,6 +181,10 @@ final class SeamLedgerLaunchTests: XCTestCase {
         ).firstMatch.exists, app.debugDescription)
         app.buttons["Cancel"].tap()
 
+        let addPhoto = app.buttons["backup.test.addPhoto"]
+        reveal(addPhoto, in: app)
+        addPhoto.tap()
+
         let reportTest = app.buttons["report.test"]
         reveal(reportTest, in: app)
         reportTest.tap()
@@ -199,6 +203,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         app.buttons["backup.test.load"].tap()
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 reference PDF"))
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 alteration photo(s)"))
         app.buttons["backup.restore"].tap()
         app.buttons["backup.restore.confirm"].tap()
         let restoreFailure = app.staticTexts["backup.message"]

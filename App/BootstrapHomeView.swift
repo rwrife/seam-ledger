@@ -150,6 +150,8 @@ struct BootstrapHomeView: View {
                                    hasReferencePDF: hasReferencePDF)
                 }
                 .accessibilityIdentifier("report.test")
+                Button("Add backup test photo") { addBackupUITestPhoto() }
+                    .accessibilityIdentifier("backup.test.addPhoto")
                 if let reportTestMessage {
                     Text(reportTestMessage).accessibilityIdentifier("report.test.message")
                 }
@@ -339,6 +341,14 @@ struct BootstrapHomeView: View {
             }
             reportTestMessage = "PDF report generated; photo data is excluded."
         } catch { reportTestMessage = "PDF report validation failed: \(error.localizedDescription)" }
+    }
+
+    private func addBackupUITestPhoto() {
+        do {
+            let note = try AlterationNote(id: UUID().uuidString, text: "Backup-only photo entry",
+                                          photo: Data([1, 2, 3]))
+            try append(.addAlteration(note))
+        } catch { error = error.localizedDescription }
     }
 #endif
     private func restoreBackup(_ archive: ProjectBackupArchive) throws -> String? {
