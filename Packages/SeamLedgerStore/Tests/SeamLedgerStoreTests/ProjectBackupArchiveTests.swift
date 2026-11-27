@@ -13,20 +13,23 @@ import SeamLedgerKit
         let filename = UUID().uuidString + ".pdf"
         let snapshot = ProjectStore.ProjectSnapshot(id: "project", name: "Jacket", referenceFile: filename,
                                                     definition: definition, events: events)
-        let pdf = Data("%PDF-1.7\nminimal fixture".utf8)
+        let pdf = Data("%PDF-1.7".utf8)
 
         let encoded = try ProjectBackupArchive.encode(projects: [snapshot], referenceFiles: [filename: pdf])
         let decoded = try ProjectBackupArchive.decode(encoded)
 
         #expect(decoded.formatVersion == ProjectBackupArchive.currentVersion)
         #expect(decoded.projects == [snapshot])
-        #expect(decoded.referenceFiles == [filename: pdf])
+        #expect(decoded.references.map(\.filename) == [filename])
+        #expect(decoded.references.first?.data == pdf)
+        #expect(decoded.references.first?.sha256 == "86edbaa24831badfa0a8b04bb410141e2ee4182b6d0014493fe262a7a331c20b")
     }
 
     @Test func rejectsUnknownVersionsAndMissingOrUnsafeReferences() throws {
         let archive = try ProjectBackupArchive.encode(projects: [], referenceFiles: [:])
-        let unknownVersion = Data(String(decoding: archive, as: UTF8.self)
-            .replacingOccurrences(of: "\"formatVersion\":1", with: "\"formatVersion\":2").utf8)
+        var object = try #require(JSONSerialization.jsonObject(with: archive) as? [String: Any])
+        object["formatVersion"] = 99
+        let unknownVersion = try JSONSerialization.data(withJSONObject: object)
         #expect(throws: LedgerError.invalidInput) { try ProjectBackupArchive.decode(unknownVersion) }
 
         let definition = try ProjectDefinition(pieces: [])
@@ -52,5 +55,41 @@ import SeamLedgerKit
         #expect(throws: LedgerError.invalidInput) {
             try ProjectBackupArchive.decode(Data(repeating: 0, count: ProjectBackupArchive.maximumArchiveBytes + 1))
         }
+    }
+
+    @Test func rejectsTamperedAttachmentDigest() throws {
+        let definition = try ProjectDefinition(pieces: [])
+        let filename = UUID().uuidString + ".pdf"
+        let snapshot = ProjectStore.ProjectSnapshot(id: "project", name: "Jacket", referenceFile: filename,
+                                                    definition: definition, events: [])
+        let encoded = try ProjectBackupArchive.encode(projects: [snapshot],
+                                                      referenceFiles: [filename: Data("%PDF-1.7".utf8)])
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var attachments = try #require(object["references"] as? [[String: Any]])
+        attachments[0]["sha256"] = String(repeating: "0", count: 64)
+        object["references"] = attachments
+        let tampered = try JSONSerialization.data(withJSONObject: object)
+        #expect(throws: LedgerError.invalidInput) { try ProjectBackupArchive.decode(tampered) }
+    }
+
+    @Test func decodesVersionOneArchives() throws {
+        let definition = try ProjectDefinition(pieces: [])
+        let filename = UUID().uuidString + ".pdf"
+        let snapshot = ProjectStore.ProjectSnapshot(id: "project", name: "Jacket", referenceFile: filename,
+                                                    definition: definition, events: [])
+        let current = try ProjectBackupArchive.encode(projects: [snapshot],
+                                                      referenceFiles: [filename: Data("%PDF-1.7".utf8)])
+        let object = try #require(JSONSerialization.jsonObject(with: current) as? [String: Any])
+        let attachments = try #require(object["references"] as? [[String: Any]])
+        let legacy = ["formatVersion": 1,
+                      "projects": try #require(object["projects"]),
+                      "referenceFiles": [filename: try #require(attachments[0]["data"])]] as [String: Any]
+        let legacyData = try JSONSerialization.data(withJSONObject: legacy)
+
+        let decoded = try ProjectBackupArchive.decode(legacyData)
+        #expect(decoded.formatVersion == 1)
+        #expect(decoded.references.first?.data == Data("%PDF-1.7".utf8))
+        #expect(decoded.references.first?.sha256 == "86edbaa24831badfa0a8b04bb410141e2ee4182b6d0014493fe262a7a331c20b")
+        #expect(try ProjectBackupArchive.decode(JSONEncoder().encode(decoded)) == decoded)
     }
 }
