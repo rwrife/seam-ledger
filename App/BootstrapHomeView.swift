@@ -313,6 +313,7 @@ private struct ReferencePanel: View {
                     Button { pageIndex -= 1 } label: { Image(systemName: "chevron.left") }
                         .disabled(pageIndex <= 0)
                         .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                         .accessibilityLabel("Previous reference page")
                         .accessibilityIdentifier("reference.previous")
                     Spacer()
@@ -321,11 +322,13 @@ private struct ReferencePanel: View {
                     Spacer()
                     Button { showingReference = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
                         .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                         .accessibilityLabel("Open owned reference PDF")
                         .accessibilityIdentifier("reference.open")
                     Button { pageIndex += 1 } label: { Image(systemName: "chevron.right") }
                         .disabled(pageIndex >= document.pageCount - 1)
                         .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                         .accessibilityLabel("Next reference page")
                         .accessibilityIdentifier("reference.next")
                 }

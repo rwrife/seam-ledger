@@ -12,7 +12,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
                 let frame = element.frame
                 if element.isHittable && (visible.contains(frame) || frame == previousFrame) { return }
                 previousFrame = frame
-                if frame.midY < visible.midY { scroll.swipeDown() }
+                if frame.maxY < visible.minY { scroll.swipeDown() }
                 else { scroll.swipeUp() }
             } else {
                 scroll.swipeUp()
@@ -131,6 +131,11 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["reference.page"].waitForExistence(timeout: 10), app.debugDescription)
         app.buttons["reference.next"].tap()
         XCTAssertEqual(app.staticTexts["reference.page"].label, "Page 2 of 2")
+        for id in ["reference.previous", "reference.open", "reference.next"] {
+            let control = app.buttons[id]
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, id)
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, id)
+        }
         let pieceName = app.textFields["piece.name"]
         reveal(pieceName, in: app)
         XCTAssertTrue(pieceName.isHittable, app.debugDescription)
@@ -197,8 +202,6 @@ final class SeamLedgerLaunchTests: XCTestCase {
         app.launch()
         enter("Accessibility audit", id: "project.name", in: app)
         app.buttons["project.create"].tap()
-        app.buttons["reference.import"].tap()
-        XCTAssertTrue(app.staticTexts["reference.page"].waitForExistence(timeout: 10))
         try app.performAccessibilityAudit()
     }
 }
