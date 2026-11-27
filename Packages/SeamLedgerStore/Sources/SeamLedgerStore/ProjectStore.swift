@@ -86,10 +86,10 @@ public final class ProjectStore: Sendable {
             try db.execute(sql: "UPDATE projects SET referenceFile = ? WHERE id = ?", arguments: [filename, projectID])
             guard db.changesCount == 1 else { throw LedgerError.invalidInput }
         }
+    }
 
-        private static func isValidReferenceFile(_ filename: String) -> Bool {
-            filename.hasSuffix(".pdf") && UUID(uuidString: String(filename.dropLast(4))) != nil
-        }
+    private static func isValidReferenceFile(_ filename: String) -> Bool {
+        filename.hasSuffix(".pdf") && UUID(uuidString: String(filename.dropLast(4))) != nil
     }
 
     public func create(id: String, name: String, definition: ProjectDefinition) throws {
