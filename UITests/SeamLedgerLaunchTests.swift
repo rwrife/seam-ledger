@@ -3,17 +3,19 @@ import XCTest
 final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let visible = app.frame.insetBy(dx: 0, dy: 100)
+        let controls = app.scrollViews["workspace.controls"]
+        let scroll = controls.exists ? controls : app.scrollViews.firstMatch
         var previousFrame: CGRect?
-        for _ in 0..<20 {
+        for _ in 0..<30 {
+            let visible = scroll.frame.insetBy(dx: 0, dy: 10)
             if element.exists {
                 let frame = element.frame
                 if element.isHittable && (visible.contains(frame) || frame == previousFrame) { return }
                 previousFrame = frame
-                if frame.midY < visible.midY { app.swipeDown() }
-                else { app.swipeUp() }
+                if frame.midY < visible.midY { scroll.swipeDown() }
+                else { scroll.swipeUp() }
             } else {
-                app.swipeUp()
+                scroll.swipeUp()
             }
         }
         XCTAssertTrue(element.isHittable, app.debugDescription)

@@ -55,6 +55,7 @@ struct BootstrapHomeView: View {
                             }
                             .padding(20)
                         }
+                        .accessibilityIdentifier("workspace.controls")
                     }
                 } else {
                     ScrollView {
