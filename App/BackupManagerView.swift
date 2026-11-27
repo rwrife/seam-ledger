@@ -137,7 +137,9 @@ struct BackupManagerView: View {
 
     private func loadUITestBackup() {
         do {
-            let data = try Data(contentsOf: uiTestBackupURL)
+            let handle = try FileHandle(forReadingFrom: uiTestBackupURL)
+            defer { try? handle.close() }
+            let data = try handle.read(upToCount: ProjectBackupArchive.maximumArchiveBytes + 1) ?? Data()
             archive = try ProjectBackupArchive.decode(data)
             try FileManager.default.removeItem(at: uiTestBackupURL)
             message = nil
