@@ -22,6 +22,7 @@ struct BootstrapHomeView: View {
     @State private var showingReference = false
     @State private var showingSewing = false
     @State private var showingBackupManager = false
+    @State private var resetSelectionAfterBackupDismissal = false
     @State private var reportDocument: ProjectPDFReportDocument?
     @State private var exportingReport = false
     @State private var showingReportPreview = false
@@ -131,7 +132,13 @@ struct BootstrapHomeView: View {
             Button("Backup, restore, or delete local data") { showingBackupManager = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("backup.open")
-                .sheet(isPresented: $showingBackupManager) {
+                .sheet(isPresented: $showingBackupManager, onDismiss: {
+                    if resetSelectionAfterBackupDismissal {
+                        selectedID = nil
+                        project = nil
+                        resetSelectionAfterBackupDismissal = false
+                    }
+                }) {
                     NavigationStack {
                         BackupManagerView(makeBackup: makeBackup,
                                           restore: restoreBackup,
@@ -397,8 +404,7 @@ struct BootstrapHomeView: View {
                 }
                 throw error
             }
-            selectedID = nil
-            project = nil
+            resetSelectionAfterBackupDismissal = true
             var warnings: [String] = []
             do { projects = try store.projects() }
             catch {
@@ -437,8 +443,7 @@ struct BootstrapHomeView: View {
             throw error
         }
         projects = []
-        selectedID = nil
-        project = nil
+        resetSelectionAfterBackupDismissal = true
         if hadReferences {
             do { try manager.removeItem(at: previous) }
             catch {
