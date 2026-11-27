@@ -5,6 +5,43 @@ import SeamLedgerKit
 @testable import SeamLedgerStore
 
 @Suite struct ProjectStoreTests {
+    @Test func replaceAllIsAtomicAndDeleteAllRemovesOwnedDatabaseRecords() throws {
+        let dir = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let path = dir.appendingPathComponent("replace.sqlite").path
+        let store = try ProjectStore(path: path)
+        let originalDefinition = try ProjectDefinition(pieces: [Piece(id: "old", requiredCount: 2)])
+        try store.create(id: "old-project", name: "Original", definition: originalDefinition)
+        try store.append(projectID: "old-project", events: [
+            .init(id: "old-cut", revision: 0, action: .cut(pieceID: "old", physicalIndex: 1))
+        ])
+        let original = try store.snapshot()
+
+        let replacementDefinition = try ProjectDefinition(pieces: [Piece(id: "new", requiredCount: 1)])
+        let replacementEvents = [SewingEvent(id: "reject", revision: 0,
+                                             action: .cut(pieceID: "new", physicalIndex: 1))]
+        let rejected = ProjectStore.ProjectSnapshot(id: "new-project", name: "Replacement", referenceFile: nil,
+                                                    definition: replacementDefinition, events: replacementEvents)
+        let inspection = try DatabaseQueue(path: path)
+        try inspection.write { db in
+            try db.execute(sql: "CREATE TRIGGER reject_restore BEFORE INSERT ON events WHEN NEW.eventID = 'reject' BEGIN SELECT RAISE(ABORT, 'forced restore failure'); END")
+        }
+        #expect(throws: DatabaseError.self) { try store.replaceAll(with: [rejected]) }
+        #expect(try store.snapshot() == original)
+
+        try inspection.write { try $0.execute(sql: "DROP TRIGGER reject_restore") }
+        let accepted = ProjectStore.ProjectSnapshot(id: "new-project", name: "Replacement", referenceFile: nil,
+                                                    definition: replacementDefinition, events: [
+                                                        .init(id: "new-cut", revision: 0,
+                                                              action: .cut(pieceID: "new", physicalIndex: 1))
+                                                    ])
+        try store.replaceAll(with: [accepted])
+        #expect(try ProjectStore(path: path).snapshot() == [accepted])
+        try store.deleteAll()
+        #expect(try ProjectStore(path: path).snapshot().isEmpty)
+        #expect(try ProjectStore(path: path).projects().isEmpty)
+    }
+
     @Test func snapshotPreservesOriginalDefinitionAndOrderedPhotoHistory() throws {
         let dir = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }

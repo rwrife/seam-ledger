@@ -92,6 +92,38 @@ public final class ProjectStore: Sendable {
         filename.hasSuffix(".pdf") && UUID(uuidString: String(filename.dropLast(4))) != nil
     }
 
+    /// Atomically replaces all project rows and histories; attachment files are managed by the caller.
+    public func replaceAll(with snapshots: [ProjectSnapshot]) throws {
+        guard Set(snapshots.map(\.id)).count == snapshots.count else { throw LedgerError.invalidInput }
+        let encoder = JSONEncoder()
+        let prepared = try snapshots.map { snapshot -> (ProjectSnapshot, Data, [Data]) in
+            guard !snapshot.id.isEmpty,
+                  !snapshot.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  snapshot.referenceFile.map(Self.isValidReferenceFile) ?? true else { throw LedgerError.invalidInput }
+            try snapshot.definition.validate()
+            var replay = try SewingProject(definition: snapshot.definition)
+            for event in snapshot.events { try replay.apply(event) }
+            return (snapshot, try encoder.encode(snapshot.definition), try snapshot.events.map(encoder.encode))
+        }
+
+        try database.write { db in
+            try db.execute(sql: "DELETE FROM projects")
+            for (snapshot, definition, events) in prepared {
+                try db.execute(sql: "INSERT INTO projects (id, definition, name, referenceFile) VALUES (?, ?, ?, ?)",
+                               arguments: [snapshot.id, definition, snapshot.name, snapshot.referenceFile])
+                for (event, payload) in zip(snapshot.events, events) {
+                    try db.execute(sql: "INSERT INTO events (projectID, eventID, payload) VALUES (?, ?, ?)",
+                                   arguments: [snapshot.id, event.id, payload])
+                }
+            }
+        }
+    }
+
+    /// Removes database-owned project records and histories in one transaction.
+    public func deleteAll() throws {
+        try database.write { db in try db.execute(sql: "DELETE FROM projects") }
+    }
+
     public func create(id: String, name: String, definition: ProjectDefinition) throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw LedgerError.invalidInput }
         guard !id.isEmpty else { throw LedgerError.invalidInput }
