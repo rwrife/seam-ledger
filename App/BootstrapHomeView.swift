@@ -348,7 +348,7 @@ struct BootstrapHomeView: View {
             let note = try AlterationNote(id: UUID().uuidString, text: "Backup-only photo entry",
                                           photo: Data([1, 2, 3]))
             try append(.addAlteration(note))
-        } catch { error = error.localizedDescription }
+        } catch let captureError { self.error = captureError.localizedDescription }
     }
 #endif
     private func restoreBackup(_ archive: ProjectBackupArchive) throws -> String? {
