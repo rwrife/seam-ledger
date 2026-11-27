@@ -86,6 +86,7 @@ struct BootstrapHomeView: View {
             Button("Export PDF report") { exportingReport = true }
                 .accessibilityIdentifier("report.export.confirm")
             Button("Cancel", role: .cancel) { }
+                .accessibilityIdentifier("report.preview.cancel")
         } message: {
             Text(reportPreviewMessage)
         }

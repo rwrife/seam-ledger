@@ -179,7 +179,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "Photos and reference PDF contents are excluded")
         ).firstMatch.exists, app.debugDescription)
-        app.buttons["Cancel"].tap()
+        app.buttons["report.preview.cancel"].tap()
 
         let addPhoto = app.buttons["backup.test.addPhoto"]
         reveal(addPhoto, in: app)
