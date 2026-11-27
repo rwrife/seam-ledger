@@ -38,7 +38,7 @@ public final class ProjectStore: Sendable {
     }
 
     /// Database contents only. Reference files must be copied separately for a backup.
-    public struct ProjectSnapshot: Equatable, Sendable {
+    public struct ProjectSnapshot: Codable, Equatable, Sendable {
         public let id: String
         public let name: String
         public let referenceFile: String?
