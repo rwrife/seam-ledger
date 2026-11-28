@@ -23,7 +23,7 @@ Concrete examples: distinguish outer and lining sleeve pairs; catch 10 mm versus
 - Explicit seam edge pairing and exact allowance comparison, with sewn/pressed state.
 - Fitting notes, optional photos, and manually entered before/after measurements.
 - Versioned JSON backups include project histories, alteration photos, and owned reference PDFs, with attachment digests and size/path validation before previewed replacement.
-- CSV cut/seam report generation and on-device PDF report export are implemented; previewed CSV Files export remains in development.
+- CSV cut/seam report generation, previewed Files export, and on-device PDF report export are implemented; native export acceptance is still under verification.
 - VoiceOver, Dynamic Type, high contrast and large controls; no color-only warnings.
 
 ## Platform contract and dual-screen target

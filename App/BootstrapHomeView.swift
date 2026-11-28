@@ -31,6 +31,7 @@ struct BootstrapHomeView: View {
     @State private var reportTestMessage: String?
     @State private var showingCSVReportPreview = false
     @State private var exportingCSVReport = false
+    @State private var pendingCSVExport = false
     @State private var csvReportDocument: ReportExportDocument?
     @State private var reportFilename = "seam-ledger-report"
     @FocusState private var pieceNameFocused: Bool
@@ -68,7 +69,10 @@ struct BootstrapHomeView: View {
             }
             .fileExporter(isPresented: $exportingCSVReport, document: csvReportDocument,
                           contentType: .commaSeparatedText, defaultFilename: reportFilename) { result in
-                if case let .failure(exportError) = result { error = exportError.localizedDescription }
+                switch result {
+                case .success: error = nil
+                case let .failure(exportError): error = exportError.localizedDescription
+                }
             }
             .confirmationDialog("Replace piece definitions? All old cut and seam progress will reset; history stays available.",
                                 isPresented: Binding(get: { pendingDefinition != nil }, set: { if !$0 { pendingDefinition = nil } }),
@@ -176,7 +180,12 @@ struct BootstrapHomeView: View {
             Button("Preview and export CSV reports") { showingCSVReportPreview = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("report.csv.preview")
-                .sheet(isPresented: $showingCSVReportPreview) {
+                .sheet(isPresented: $showingCSVReportPreview, onDismiss: {
+                    if pendingCSVExport {
+                        pendingCSVExport = false
+                        exportingCSVReport = true
+                    }
+                }) {
                     NavigationStack {
                         ReportExportPreview(projectName: info?.name ?? "Project",
                                             onExportCuts: {
@@ -491,7 +500,7 @@ struct BootstrapHomeView: View {
         csvReportDocument = ReportExportDocument(data: Data(csv.utf8))
         reportFilename = filename
         showingCSVReportPreview = false
-        exportingCSVReport = true
+        pendingCSVExport = true
     }
     private func importReference(_ result: Result<URL, Error>) {
         perform {

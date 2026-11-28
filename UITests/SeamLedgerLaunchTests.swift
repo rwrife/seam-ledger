@@ -40,7 +40,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
     }
 
     @MainActor
-    private func saveExportedBackup(in app: XCUIApplication) {
+    private func completeFileExport(in app: XCUIApplication) {
         let save = app.buttons["Save"]
         if !save.exists { chooseLocalFilesLocation(in: app) }
         XCTAssertTrue(save.waitForExistence(timeout: 10), app.debugDescription)
@@ -210,7 +210,9 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts.containing(
             NSPredicate(format: "label CONTAINS %@", "Photos and reference PDF contents are excluded")
         ).firstMatch.exists, app.debugDescription)
-        app.buttons.matching(identifier: "report.preview.close").firstMatch.tap()
+        app.buttons.matching(identifier: "report.export.confirm").firstMatch.tap()
+        completeFileExport(in: app)
+        XCTAssertFalse(app.staticTexts["workspace.error"].exists, app.debugDescription)
 
         let addPhoto = app.buttons["backup.test.addPhoto"]
         reveal(addPhoto, in: app)
@@ -227,7 +229,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         open.tap()
         XCTAssertTrue(app.staticTexts["The exported file contains private measurements and photos. Store and share it carefully."].exists)
         app.buttons["backup.export"].tap()
-        saveExportedBackup(in: app)
+        completeFileExport(in: app)
         XCTAssertTrue(app.staticTexts["backup.message"].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(app.staticTexts["backup.message"].label.contains("Backup saved"))
 
@@ -281,5 +283,8 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["report.photosExcluded"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["report.export.cuts"].exists)
         XCTAssertTrue(app.buttons["report.export.seams"].exists)
+        app.buttons["report.export.cuts"].tap()
+        completeFileExport(in: app)
+        XCTAssertFalse(app.staticTexts["workspace.error"].exists, app.debugDescription)
     }
 }
