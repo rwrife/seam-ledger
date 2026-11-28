@@ -30,7 +30,7 @@ Concrete examples: distinguish outer and lining sleeve pairs; catch 10 mm versus
 
 Native Swift (SwiftUI/UIKit), iPhone-only, iOS 26 SDK or newer. `toolchain.json` declares Xcode 26.0.1 (17A400), iOS SDK 26.0 and Swift 6. `TARGETED_DEVICE_FAMILY = 1` in every future app-target configuration and generator; Apple CI must verify built `UIDeviceFamily == [1]`. Native iPad support is disabled; iPhone compatibility mode on iPad is not native support.
 
-The iPhone Duo design target keeps the pattern page/edge diagram visible on one display while cut counts and sewing/pressing controls remain on the other. Today's implementation must be a standard single-screen iPhone app. `SewingWorkspaceLayout` is the one future dual-screen migration seam; no unavailable fold APIs and no inferred iPad permission.
+The iPhone Duo design target keeps the pattern page/edge diagram visible on one display while cut counts and sewing/pressing controls remain on the other. The standard single-screen iPhone workspace keeps an imported reference above the cutting or sewing controls, preserving its page while switching between them. `SewingWorkspaceLayout` is the future dual-screen migration seam; it uses no unavailable fold APIs and does not enable iPad support.
 
 ## Privacy, permissions and storage
 

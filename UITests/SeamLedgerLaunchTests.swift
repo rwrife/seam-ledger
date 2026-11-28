@@ -3,17 +3,19 @@ import XCTest
 final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
     private func reveal(_ element: XCUIElement, in app: XCUIApplication) {
-        let visible = app.frame.insetBy(dx: 0, dy: 100)
+        let controls = app.scrollViews["workspace.controls"]
+        let scroll = controls.exists ? controls : app.scrollViews.firstMatch
         var previousFrame: CGRect?
-        for _ in 0..<20 {
+        for _ in 0..<30 {
+            let visible = scroll.frame.insetBy(dx: 0, dy: 10)
             if element.exists {
                 let frame = element.frame
                 if element.isHittable && (visible.contains(frame) || frame == previousFrame) { return }
                 previousFrame = frame
-                if frame.midY < visible.midY { app.swipeDown() }
-                else { app.swipeUp() }
+                if frame.maxY < visible.minY { scroll.swipeDown() }
+                else { scroll.swipeUp() }
             } else {
-                app.swipeUp()
+                scroll.swipeUp()
             }
         }
         XCTAssertTrue(element.isHittable, app.debugDescription)
@@ -24,6 +26,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let field = app.textFields[id]
         reveal(field, in: app)
         field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
         field.typeText(value)
         app.keyboards.buttons["Done"].tap()
     }
@@ -145,8 +148,16 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let importButton = app.buttons["reference.import"]
         XCTAssertTrue(importButton.waitForExistence(timeout: 10))
         importButton.tap()
-        XCTAssertTrue(app.buttons["reference.open"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["reference.page"].waitForExistence(timeout: 10), app.debugDescription)
+        app.buttons["reference.next"].tap()
+        XCTAssertEqual(app.staticTexts["reference.page"].label, "Page 2 of 2")
+        for id in ["reference.previous", "reference.open", "reference.next"] {
+            let control = app.buttons[id]
+            XCTAssertGreaterThanOrEqual(control.frame.width, 44, id)
+            XCTAssertGreaterThanOrEqual(control.frame.height, 44, id)
+        }
         let pieceName = app.textFields["piece.name"]
+        reveal(pieceName, in: app)
         XCTAssertTrue(pieceName.isHittable, app.debugDescription)
         pieceName.tap()
         pieceName.typeText("Sleeves")
@@ -155,17 +166,63 @@ final class SeamLedgerLaunchTests: XCTestCase {
         for _ in 0..<3 where !mirrored.isHittable { app.swipeUp() }
         mirrored.tap()
         XCTAssertTrue(String(describing: mirrored.value).contains("1"))
-        app.buttons["piece.add"].tap()
+        let addPiece = app.buttons["piece.add"]
+        reveal(addPiece, in: app)
+        addPiece.tap()
         let first = app.buttons["cut.Sleeves.1"]
         XCTAssertTrue(first.waitForExistence(timeout: 10))
+        reveal(first, in: app)
         first.tap()
         XCTAssertTrue(app.staticTexts["1 cut of 2; 1 remaining"].waitForExistence(timeout: 10))
+        let sewing = app.buttons["workspace.sewing"]
+        reveal(sewing, in: app)
+        sewing.tap()
+        XCTAssertEqual(app.staticTexts["reference.page"].label, "Page 2 of 2")
+        app.buttons["workspace.cutting"].tap()
+        XCTAssertTrue(app.staticTexts["1 cut of 2; 1 remaining"].exists)
+        XCTAssertEqual(app.staticTexts["reference.page"].label, "Page 2 of 2")
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertEqual(app.staticTexts["reference.page"].label, "Page 2 of 2")
+        XCUIDevice.shared.orientation = .portrait
         app.terminate()
         app.launch()
         app.buttons[uniqueName].tap()
         XCTAssertTrue(app.staticTexts["1 cut of 2; 1 remaining"].waitForExistence(timeout: 10))
+        reveal(app.buttons["cut.Sleeves.1"], in: app)
         app.buttons["cut.Sleeves.1"].tap()
         XCTAssertTrue(app.staticTexts["0 cut of 2; 2 remaining"].waitForExistence(timeout: 10))
+    }
+
+    @MainActor
+    func testAccessibilitySizeWorkspaceReflows() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestPDF", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        enter("Large type", id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        app.buttons["reference.import"].tap()
+        XCTAssertTrue(app.staticTexts["reference.page"].waitForExistence(timeout: 10))
+        enter("Panel", id: "piece.name", in: app)
+        let addPiece = app.buttons["piece.add"]
+        reveal(addPiece, in: app)
+        addPiece.tap()
+        let sewing = app.buttons["workspace.sewing"]
+        reveal(sewing, in: app)
+        sewing.tap()
+        XCTAssertTrue(app.staticTexts["reference.page"].exists)
+        let note = app.textFields["alteration.note"]
+        reveal(note, in: app)
+        XCTAssertTrue(note.isHittable)
+    }
+
+    @MainActor
+    func testWorkspacePassesAccessibilityAudit() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestPDF"]
+        app.launch()
+        enter("Accessibility audit", id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        try app.performAccessibilityAudit()
     }
 
     @MainActor
