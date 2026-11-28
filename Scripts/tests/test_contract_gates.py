@@ -32,7 +32,7 @@ class ContractGateTests(unittest.TestCase):
         )
         self.assertNotEqual(self.run_gate("check_zero_network.sh").returncode, 0)
 
-    def test_exact_grdb_dependency_passes(self):
+    def test_exact_reviewed_dependencies_pass(self):
         store = self.root / "Packages" / "SeamLedgerStore"
         store.mkdir()
         kit = self.root / "Packages" / "SeamLedgerKit"
@@ -42,7 +42,7 @@ class ContractGateTests(unittest.TestCase):
         shutil.copy2(ROOT / "Packages/SeamLedgerStore/Package.resolved", store)
         self.assertEqual(self.run_gate("check_zero_network.sh").returncode, 0)
 
-    def test_changed_grdb_pin_and_other_dependencies_fail(self):
+    def test_changed_reviewed_pins_and_other_dependencies_fail(self):
         store = self.root / "Packages" / "SeamLedgerStore"
         store.mkdir()
         manifest = store / "Package.swift"
@@ -50,7 +50,10 @@ class ContractGateTests(unittest.TestCase):
         original = (ROOT / "Packages/SeamLedgerStore/Package.swift").read_text()
         for changed in (original.replace('exact: "7.8.0"', 'from: "7.8.0"'),
                         original.replace('exact: "7.8.0"', 'exact: "7.9.0"'),
-                        original.replace('groue/GRDB.swift', 'other/GRDB.swift')):
+                        original.replace('groue/GRDB.swift', 'other/GRDB.swift'),
+                        original.replace('exact: "3.15.1"', 'from: "3.15.1"'),
+                        original.replace('exact: "3.15.1"', 'exact: "3.15.2"'),
+                        original.replace('apple/swift-crypto', 'other/swift-crypto')):
             manifest.write_text(changed)
             self.assertNotEqual(self.run_gate("check_zero_network.sh").returncode, 0)
 

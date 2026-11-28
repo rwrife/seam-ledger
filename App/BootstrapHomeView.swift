@@ -21,6 +21,20 @@ struct BootstrapHomeView: View {
     @State private var importing = false
     @State private var showingSewing = false
     @State private var referencePages: [String: Int] = [:]
+    @State private var showingBackupManager = false
+    @State private var resetSelectionAfterBackupDismissal = false
+    @State private var reportDocument: ProjectPDFReportDocument?
+    @State private var exportingReport = false
+    @State private var showingReportPreview = false
+    @State private var pendingReportExport = false
+    @State private var reportPreviewMessage = ""
+    @State private var didInjectRestoreFailure = false
+    @State private var reportTestMessage: String?
+    @State private var showingCSVReportPreview = false
+    @State private var exportingCSVReport = false
+    @State private var pendingCSVExport = false
+    @State private var csvReportDocument: ReportExportDocument?
+    @State private var reportFilename = "seam-ledger-report"
     @FocusState private var pieceNameFocused: Bool
     @State private var error: String?
     @State private var pendingDefinition: ProjectDefinition?
@@ -78,6 +92,13 @@ struct BootstrapHomeView: View {
             .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
                 importReference(result)
             }
+            .fileExporter(isPresented: $exportingCSVReport, document: csvReportDocument,
+                          contentType: .commaSeparatedText, defaultFilename: reportFilename) { result in
+                switch result {
+                case .success: error = nil
+                case let .failure(exportError): error = exportError.localizedDescription
+                }
+            }
             .confirmationDialog("Replace piece definitions? All old cut and seam progress will reset; history stays available.",
                                 isPresented: Binding(get: { pendingDefinition != nil }, set: { if !$0 { pendingDefinition = nil } }),
                                 titleVisibility: .visible) {
@@ -91,6 +112,27 @@ struct BootstrapHomeView: View {
             }
         }
         .onAppear(perform: openStore)
+        .fileExporter(isPresented: $exportingReport, document: reportDocument,
+                      contentType: .pdf, defaultFilename: "seam-ledger-report") { result in
+            switch result {
+            case .success: error = nil
+            case let .failure(exportError): error = "PDF report export failed: \(exportError.localizedDescription)"
+            }
+        }
+        .confirmationDialog("PDF report preview", isPresented: $showingReportPreview,
+                            titleVisibility: .visible) {
+            Button("Export PDF report") { pendingReportExport = true }
+                .accessibilityIdentifier("report.export.confirm")
+            Button("Close preview") { showingReportPreview = false }
+                .accessibilityIdentifier("report.preview.close")
+        } message: {
+            Text(reportPreviewMessage)
+        }
+        .onChange(of: showingReportPreview) { _, isPresented in
+            guard !isPresented, pendingReportExport else { return }
+            pendingReportExport = false
+            exportingReport = true
+        }
     }
 
     @ViewBuilder private var errorMessage: some View {
@@ -132,7 +174,67 @@ struct BootstrapHomeView: View {
     private func projectPanel(_ current: SewingProject, id: String) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             let info = projects.first(where: { $0.id == id })
+            let hasReferencePDF = info?.referenceFile.map {
+                FileManager.default.fileExists(atPath: referenceDirectory.appending(path: $0).path)
+            } ?? false
             Text(info?.name ?? "Project").font(.title2.bold())
+            Button("Backup, restore, or delete local data") { showingBackupManager = true }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("backup.open")
+                .sheet(isPresented: $showingBackupManager, onDismiss: {
+                    if resetSelectionAfterBackupDismissal {
+                        selectedID = nil
+                        project = nil
+                        resetSelectionAfterBackupDismissal = false
+                    }
+                }) {
+                    NavigationStack {
+                        BackupManagerView(makeBackup: makeBackup,
+                                          restore: restoreBackup,
+                                          deleteAll: deleteAllOwnedData)
+                    }
+                }
+            Button("Preview project report (PDF)") {
+                prepareReportPreview(project: current, name: info?.name ?? "Project",
+                                     hasReferencePDF: hasReferencePDF)
+            }
+            .frame(minHeight: 44)
+            .accessibilityIdentifier("report.exportPDF")
+#if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-UITestReport") {
+                Button("Validate local PDF report") {
+                    validateReport(project: current, name: info?.name ?? "Project",
+                                   hasReferencePDF: hasReferencePDF)
+                }
+                .accessibilityIdentifier("report.test")
+                Button("Add backup test photo") { addBackupUITestPhoto() }
+                    .accessibilityIdentifier("backup.test.addPhoto")
+                if let reportTestMessage {
+                    Text(reportTestMessage).accessibilityIdentifier("report.test.message")
+                }
+            }
+#endif
+            Button("Preview and export CSV reports") { showingCSVReportPreview = true }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("report.csv.preview")
+                .sheet(isPresented: $showingCSVReportPreview, onDismiss: {
+                    if pendingCSVExport {
+                        pendingCSVExport = false
+                        exportingCSVReport = true
+                    }
+                }) {
+                    NavigationStack {
+                        ReportExportPreview(projectName: info?.name ?? "Project",
+                                            onExportCuts: {
+                                                beginCSVReportExport(CSVReport.cuts(current), filename: "seam-ledger-cuts")
+                                            },
+                                            onExportSeams: {
+                                                perform {
+                                                    beginCSVReportExport(try CSVReport.seams(current), filename: "seam-ledger-seams")
+                                                }
+                                            })
+                    }
+                }
             Button("Seams and alterations") { showingSewing = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("workspace.sewing")
@@ -256,8 +358,175 @@ struct BootstrapHomeView: View {
                          events: [SewingEvent(id: UUID().uuidString, revision: project.revision, action: action)])
         self.project = try store.load(id: selectedID)
     }
+    private func makeBackup() throws -> Data {
+        guard let store else { throw LedgerError.invalidInput }
+        let snapshots = try store.snapshot()
+        var references: [String: Data] = [:]
+        for snapshot in snapshots {
+            guard let filename = snapshot.referenceFile else { continue }
+            let url = referenceDirectory.appending(path: filename)
+            let values = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values.isRegularFile == true, let size = values.fileSize,
+                  size > 0, size <= ProjectBackupArchive.maximumReferenceBytes else { throw LedgerError.invalidInput }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let data = try handle.read(upToCount: ProjectBackupArchive.maximumReferenceBytes + 1) ?? Data()
+            guard data.count == size, let pdf = PDFDocument(data: data), pdf.pageCount > 0 else {
+                throw LedgerError.invalidInput
+            }
+            references[filename] = data
+        }
+        return try ProjectBackupArchive.encode(projects: snapshots, referenceFiles: references)
+    }
+    private func prepareReportPreview(project: SewingProject, name: String, hasReferencePDF: Bool) {
+        do {
+            let data = try ProjectPDFReport.make(projectName: name, project: project,
+                                                 hasReferencePDF: hasReferencePDF)
+            guard let document = PDFDocument(data: data), document.pageCount > 0 else {
+                throw LedgerError.invalidInput
+            }
+            reportDocument = ProjectPDFReportDocument(data: data)
+            reportPreviewMessage = "\(name): \(project.pieceProgressList.count) cut-list item(s), \(project.definition.seams.count) seam(s), and \(project.alterations.count) alteration note(s). Photos and reference PDF contents are excluded."
+            showingReportPreview = true
+            error = nil
+        } catch { self.error = "PDF report could not be created: \(error.localizedDescription)" }
+    }
+#if DEBUG
+    private func validateReport(project: SewingProject, name: String, hasReferencePDF: Bool) {
+        do {
+            var fixture = project
+            let photo = Data("PRIVATE-PHOTO-SECRET".utf8)
+            let note = try AlterationNote(id: "report-fixture", text: "Report test alteration", photo: photo)
+            try fixture.apply(SewingEvent(id: UUID().uuidString, revision: fixture.revision,
+                                          action: .addAlteration(note)))
+            let data = try ProjectPDFReport.make(projectName: name, project: fixture,
+                                                 hasReferencePDF: hasReferencePDF)
+            guard let document = PDFDocument(data: data), document.pageCount > 0,
+                  let text = document.string, text.contains("Report test alteration"),
+                  text.contains("Alteration photos are excluded"), !text.contains("PRIVATE-PHOTO-SECRET") else {
+                throw LedgerError.invalidInput
+            }
+            reportTestMessage = "PDF report generated; photo data is excluded."
+        } catch { reportTestMessage = "PDF report validation failed: \(error.localizedDescription)" }
+    }
+
+    private func addBackupUITestPhoto() {
+        do {
+            let note = try AlterationNote(id: UUID().uuidString, text: "Backup-only photo entry",
+                                          photo: Data([1, 2, 3]))
+            try append(.addAlteration(note))
+        } catch let captureError { self.error = captureError.localizedDescription }
+    }
+#endif
+    private func restoreBackup(_ archive: ProjectBackupArchive) throws -> String? {
+        guard let store else { throw LedgerError.invalidInput }
+        let manager = FileManager.default
+        let parent = referenceDirectory.deletingLastPathComponent()
+        try manager.createDirectory(at: parent, withIntermediateDirectories: true)
+        let staging = parent.appending(path: "References-restore-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let previous = parent.appending(path: "References-previous-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try manager.createDirectory(at: staging, withIntermediateDirectories: false)
+        do {
+            for attachment in archive.references {
+                guard let pdf = PDFDocument(data: attachment.data), pdf.pageCount > 0 else { throw LedgerError.invalidInput }
+                try attachment.data.write(to: staging.appending(path: attachment.filename), options: .atomic)
+            }
+            let hadReferences = manager.fileExists(atPath: referenceDirectory.path)
+            if hadReferences { try manager.moveItem(at: referenceDirectory, to: previous) }
+            do {
+                try manager.moveItem(at: staging, to: referenceDirectory)
+            } catch {
+                if hadReferences {
+                    do { try manager.moveItem(at: previous, to: referenceDirectory) }
+                    catch let rollbackError {
+                        throw BackupRollbackError(operation: error.localizedDescription,
+                                                  rollback: rollbackError.localizedDescription)
+                    }
+                }
+                throw error
+            }
+            do {
+#if DEBUG
+                if ProcessInfo.processInfo.arguments.contains("-UITestRestoreFailure"), !didInjectRestoreFailure {
+                    didInjectRestoreFailure = true
+                    throw LedgerError.invalidInput
+                }
+#endif
+                try store.replaceAll(with: archive.projects)
+            } catch {
+                do {
+                    try manager.removeItem(at: referenceDirectory)
+                    if hadReferences { try manager.moveItem(at: previous, to: referenceDirectory) }
+                } catch let rollbackError {
+                    throw BackupRollbackError(operation: error.localizedDescription,
+                                              rollback: rollbackError.localizedDescription)
+                }
+                throw error
+            }
+            resetSelectionAfterBackupDismissal = true
+            var warnings: [String] = []
+            do { projects = try store.projects() }
+            catch {
+                projects = []
+                warnings.append("The project list could not be refreshed: \(error.localizedDescription)")
+            }
+            if hadReferences {
+                do { try manager.removeItem(at: previous) }
+                catch {
+                    warnings.append("Previous attachments remain in app storage because cleanup failed: \(error.localizedDescription)")
+                }
+            }
+            return warnings.isEmpty ? nil : "Restore completed. " + warnings.joined(separator: " ")
+        } catch {
+            if manager.fileExists(atPath: staging.path) { try manager.removeItem(at: staging) }
+            throw error
+        }
+    }
+    private func deleteAllOwnedData() throws -> String? {
+        guard let store else { throw LedgerError.invalidInput }
+        let manager = FileManager.default
+        let previous = referenceDirectory.deletingLastPathComponent()
+            .appending(path: "References-deleted-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let hadReferences = manager.fileExists(atPath: referenceDirectory.path)
+        if hadReferences { try manager.moveItem(at: referenceDirectory, to: previous) }
+        do {
+            try store.deleteAll()
+        } catch {
+            if hadReferences {
+                do { try manager.moveItem(at: previous, to: referenceDirectory) }
+                catch let rollbackError {
+                    throw BackupRollbackError(operation: error.localizedDescription,
+                                              rollback: rollbackError.localizedDescription)
+                }
+            }
+            throw error
+        }
+        projects = []
+        resetSelectionAfterBackupDismissal = true
+        if hadReferences {
+            do { try manager.removeItem(at: previous) }
+            catch {
+                return "Local projects were deleted. Some owned attachments remain in app storage because cleanup failed: \(error.localizedDescription). Files already exported remain outside the app."
+            }
+        }
+        return "All local projects and attachments were deleted. Files you already exported remain outside the app."
+    }
     private func perform(_ work: () throws -> Void) {
         do { try work(); error = nil } catch { self.error = error.localizedDescription }
+    }
+    private struct BackupRollbackError: LocalizedError {
+        let operation: String
+        let rollback: String
+        var errorDescription: String? {
+            "Restore failed (\(operation)); restoring previous attachments also failed (\(rollback)). The previous files remain in local storage."
+        }
+    }
+
+    private func beginCSVReportExport(_ csv: String, filename: String) {
+        csvReportDocument = ReportExportDocument(data: Data(csv.utf8))
+        reportFilename = filename
+        showingCSVReportPreview = false
+        pendingCSVExport = true
     }
     private func importReference(_ result: Result<URL, Error>) {
         perform {
