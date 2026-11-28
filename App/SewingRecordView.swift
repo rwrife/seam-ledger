@@ -28,7 +28,7 @@ struct SewingRecordView: View {
             if let error {
                 Text(error).foregroundStyle(.red).accessibilityIdentifier("sewing.error")
             }
-            Text("Compares your entries only; not a fit or construction safety certification.")
+            Text("For reference; not fit or construction safety certification.")
             if let project {
                 edgeEditor(project)
                 Divider()
@@ -210,7 +210,7 @@ struct SewingRecordView: View {
     private func alterationEditor(_ current: SewingProject) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Alteration record").font(.headline)
-            Text("Manually entered dimensions only. Notes and selected photos stay on this device.")
+            Text("Dimensions are manual; notes and photos stay on device.")
             ForEach(current.alterations, id: \.id) { alteration in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(alteration.text)

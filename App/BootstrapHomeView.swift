@@ -201,17 +201,23 @@ struct BootstrapHomeView: View {
             Toggle("Cut on fold (instruction only)", isOn: $fold)
                 .accessibilityIdentifier("piece.fold")
             if !mirrored {
-                TextField("Physical cut count (blank = unknown)", text: $requiredCount)
+                Text("Leave blank if the cut count is unknown.")
+                TextField("Physical cut count", text: $requiredCount)
                     .keyboardType(.numberPad)
                     .accessibilityIdentifier("piece.count")
             }
             Button(current.definition.pieces.isEmpty ? "Add piece" : "Review definition change") {
+                let pieceID = pieceName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !pieceID.isEmpty else {
+                    error = "Enter a piece name."
+                    return
+                }
                 perform {
                     let count = mirrored ? 2 : (requiredCount.isEmpty ? nil : Int(requiredCount))
                     guard mirrored || requiredCount.isEmpty || count.map({ (1...1_000).contains($0) }) == true else {
                         throw LedgerError.invalidInput
                     }
-                    let piece = try Piece(id: pieceName, requiredCount: count,
+                    let piece = try Piece(id: pieceID, requiredCount: count,
                                           cutOnFold: fold, material: material, mirrored: mirrored)
                     let definition = try ProjectDefinition(pieces: current.definition.pieces + [piece],
                                                            edges: current.definition.edges,
@@ -225,7 +231,6 @@ struct BootstrapHomeView: View {
                 }
             }
             .frame(minHeight: 44)
-            .disabled(pieceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityIdentifier("piece.add")
         }
     }
@@ -302,12 +307,18 @@ private struct ReferencePanel: View {
     @State private var document: PDFDocument?
     @State private var showingReference = false
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var referenceHeight: CGFloat {
+        if verticalSizeClass == .compact { return 90 }
+        return dynamicTypeSize.isAccessibilitySize ? 100 : 160
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             if let document, document.pageCount > 0 {
                 PDFKitView(document: document, pageIndex: $pageIndex)
-                    .frame(height: verticalSizeClass == .compact ? 90 : 160)
+                    .frame(height: referenceHeight)
                     .accessibilityLabel("Owned pattern reference")
                     .accessibilityIdentifier("reference.document")
                 HStack {
@@ -318,7 +329,8 @@ private struct ReferencePanel: View {
                         .accessibilityLabel("Previous reference page")
                         .accessibilityIdentifier("reference.previous")
                     Spacer()
-                    Text("Page \(pageIndex + 1) of \(document.pageCount)")
+                    Text("\(pageIndex + 1) / \(document.pageCount)")
+                        .accessibilityLabel("Page \(pageIndex + 1) of \(document.pageCount)")
                         .accessibilityIdentifier("reference.page")
                     Spacer()
                     Button { showingReference = true } label: { Image(systemName: "arrow.up.left.and.arrow.down.right") }
