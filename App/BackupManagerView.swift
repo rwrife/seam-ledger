@@ -18,6 +18,9 @@ struct BackupManagerView: View {
     @State private var showingDeleteConfirmation = false
     @State private var archive: ProjectBackupArchive?
     @State private var message: String?
+    #if DEBUG
+    @State private var lastExportedURL: URL?
+    #endif
 
     var body: some View {
         Group {
@@ -38,7 +41,11 @@ struct BackupManagerView: View {
         .fileExporter(isPresented: $exporting, document: document,
                       contentType: .json, defaultFilename: "seam-ledger-backup") { result in
             switch result {
-            case .success: message = "Backup saved. It contains private project history, photos and PDFs."
+            case let .success(url):
+                #if DEBUG
+                lastExportedURL = url
+                #endif
+                message = "Backup saved. It contains private project history, photos and PDFs."
             case let .failure(error): message = "Backup export failed: \(error.localizedDescription)"
             }
         }
@@ -70,7 +77,7 @@ struct BackupManagerView: View {
             Button("Export full backup (JSON)") { beginExport() }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("backup.export")
-            Button("Preview backup to restore") { importing = true }
+            Button("Preview backup to restore") { beginImport() }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("backup.import")
             Divider()
@@ -105,6 +112,17 @@ struct BackupManagerView: View {
             if let message { Text(message).accessibilityIdentifier("backup.message") }
             Spacer()
         }
+    }
+
+    private func beginImport() {
+        #if DEBUG
+        // UI tests cannot reliably drive the system Files picker; re-read the file the export just saved.
+        if ProcessInfo.processInfo.arguments.contains("-UITestBackupImport"), let lastExportedURL {
+            importArchive(.success(lastExportedURL))
+            return
+        }
+        #endif
+        importing = true
     }
 
     private func beginExport() {
