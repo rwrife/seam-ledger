@@ -49,15 +49,12 @@ final class SeamLedgerLaunchTests: XCTestCase {
 
     @MainActor
     private func importExportedBackup(in app: XCUIApplication) {
-        let fileName = app.staticTexts["seam-ledger-backup.json"]
-        if !fileName.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
-        XCTAssertTrue(fileName.waitForExistence(timeout: 10), app.debugDescription)
-        fileName.tap()
-        let open = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "label == %@", "Open"))
+        let file = app.cells
+            .matching(NSPredicate(format: "label CONTAINS %@", "seam-ledger-backup.json"))
             .firstMatch
-        if open.waitForExistence(timeout: 2) { open.tap() }
-        else if fileName.exists { fileName.doubleTap() }
+        if !file.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
+        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
+        file.doubleTap()
     }
 
     @MainActor
