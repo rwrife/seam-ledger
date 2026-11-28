@@ -1,0 +1,255 @@
+name: Release (TestFlight)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release (must match VERSION, for example 0.1.0)
+        required: true
+        default: 0.1.0
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    name: Archive and upload to TestFlight
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify release secrets are configured
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_TEAM_ID: ${{ secrets.ASC_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8 ASC_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Required repository secret $name is not configured"
+              missing=1
+            else
+              echo "Required secret $name: present"
+            fi
+          done
+          exit "$missing"
+
+      - name: Resolve release version
+        env:
+          RELEASE_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            version="$RELEASE_INPUT"
+            tag="v$version"
+          else
+            tag="$GITHUB_REF_NAME"
+            version="${tag#v}"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Release version is not a valid numeric version: $version"
+            exit 1
+          fi
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$version" != "$file_version" ] || [ "$tag" != "v$file_version" ]; then
+            echo "::error::Release tag/input $tag must match VERSION v$file_version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+          echo "Releasing Seam Ledger $version (build $GITHUB_RUN_NUMBER)"
+
+      - name: Verify pinned Xcode and minimum iOS SDK
+        run: |
+          set -euo pipefail
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fxq 'Xcode 26.0.1' "$RUNNER_TEMP/xcode-version.txt"
+          grep -Fxq 'Build version 17A400' "$RUNNER_TEMP/xcode-version.txt"
+          sdk="$(xcrun --sdk iphoneos --show-sdk-version)"
+          major="${sdk%%.*}"
+          echo "iPhoneOS SDK: $sdk"
+          if [ "$major" -lt 26 ]; then
+            echo '::error::Release requires an iOS 26 or newer SDK'
+            exit 1
+          fi
+
+      - name: Install App Store Connect API key (mode 600)
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc-api-key.p8"
+          chmod 600 "$RUNNER_TEMP/asc-api-key.p8"
+          echo "ASC API key installed with mode $(stat -f '%Lp' "$RUNNER_TEMP/asc-api-key.p8")."
+
+      - name: Resolve Swift package dependencies
+        run: |
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project SeamLedger.xcodeproj \
+            -scheme SeamLedger \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm"
+
+      - name: Archive signed iPhone app
+        run: |
+          set -euo pipefail
+          xcodebuild build archive \
+            -project SeamLedger.xcodeproj \
+            -scheme SeamLedger \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/SeamLedger.xcarchive" \
+            -configuration Release \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/spm" \
+            -allowProvisioningUpdates \
+            -allowProvisioningDeviceRegistration \
+            -authenticationKeyPath "$RUNNER_TEMP/asc-api-key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$ASC_TEAM_ID" \
+            MARKETING_VERSION="$VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Verify archived bundle identity and device family
+        run: |
+          set -euo pipefail
+          python3 - "$RUNNER_TEMP/SeamLedger.xcarchive/Products/Applications/SeamLedger.app/Info.plist" <<'PY'
+          import plistlib
+          import sys
+
+          with open(sys.argv[1], "rb") as source:
+              info = plistlib.load(source)
+          if info.get("CFBundleIdentifier") != "com.infinityball.seamledger":
+              raise SystemExit("Archived bundle identifier does not match Seam Ledger")
+          if info.get("UIDeviceFamily") != [1]:
+              raise SystemExit("Archived UIDeviceFamily must be exactly [1]")
+          print("Archived bundle identifier and iPhone-only device family verified")
+          PY
+
+      - name: Upload signed archive to App Store Connect
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>destination</key><string>upload</string>
+            <key>method</key><string>app-store-connect</string>
+            <key>uploadMethod</key><string>app-store-connect</string>
+            <key>teamID</key><string>__TEAM__</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          PLIST
+          sed -i '' "s/__TEAM__/$ASC_TEAM_ID/" "$RUNNER_TEMP/ExportOptions.plist"
+          mkdir -p "$RUNNER_TEMP/ipa"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/SeamLedger.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/ipa" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc-api-key.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Wait for App Store Connect processing
+        run: |
+          set -euo pipefail
+          api='https://api.appstoreconnect.apple.com'
+          jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+          app_id="$(curl -sS --fail -H "Authorization: Bearer $jwt" \
+            "$api/v1/apps?filter[bundleId]=com.infinityball.seamledger" | jq -r '.data[0].id // empty')"
+          [ -n "$app_id" ] || { echo '::error::Seam Ledger bundle ID is not in App Store Connect'; exit 1; }
+          build_id=''
+          state=''
+          for attempt in $(seq 1 45); do
+            jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+            result="$(curl -sS --fail -H "Authorization: Bearer $jwt" \
+              "$api/v1/builds?filter[app]=$app_id&sort=-uploadedDate&limit=10" | \
+              jq -r --arg version "$BUILD_NUMBER" '[.data[] | select(.attributes.version == $version)] | if length == 0 then "\t" else [.[0].id, .[0].attributes.processingState] | @tsv end')"
+            IFS=$'\t' read -r build_id state <<< "$result"
+            echo "ASC processing attempt $attempt: build=${build_id:-pending}, state=${state:-unknown}"
+            if [ -n "$build_id" ] && { [ "$state" = VALID ] || [ "$state" = COMPLETE ]; }; then break; fi
+            sleep 20
+          done
+          if [ -z "$build_id" ] || { [ "$state" != VALID ] && [ "$state" != COMPLETE ]; }; then
+            echo "::error::Build $BUILD_NUMBER did not reach a processed TestFlight state (build=${build_id:-none}, state=${state:-unknown})"
+            exit 1
+          fi
+          echo "ASC_BUILD_ID=$build_id" >> "$GITHUB_ENV"
+          echo "Processed App Store Connect build: $build_id"
+
+      - name: Add processed build to Internal testers
+        run: |
+          set -euo pipefail
+          api='https://api.appstoreconnect.apple.com'
+          jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+          app_id="$(curl -sS --fail -H "Authorization: Bearer $jwt" \
+            "$api/v1/apps?filter[bundleId]=com.infinityball.seamledger" | jq -r '.data[0].id')"
+          jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+          group_id="$(curl -sS --fail -H "Authorization: Bearer $jwt" \
+            "$api/v1/betaGroups?filter[app]=$app_id&filter[name]=Internal" | jq -r '.data[0].id // empty')"
+          if [ -z "$group_id" ]; then
+            jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+            group_id="$(curl -sS --fail -H "Authorization: Bearer $jwt" \
+              -H 'Content-Type: application/json' -X POST "$api/v1/betaGroups" \
+              -d "{\"data\":{\"type\":\"betaGroups\",\"attributes\":{\"name\":\"Internal\",\"isInternalGroup\":true},\"relationships\":{\"app\":{\"data\":{\"type\":\"apps\",\"id\":\"$app_id\"}}}}}" | jq -r '.data.id')"
+          fi
+          jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+          curl -sS --fail -H "Authorization: Bearer $jwt" -H 'Content-Type: application/json' \
+            -X POST "$api/v1/builds/$ASC_BUILD_ID/relationships/betaGroups" \
+            -d "{\"data\":[{\"type\":\"betaGroups\",\"id\":\"$group_id\"}]}" > /dev/null
+          notes="$(git log -1 --format=%s "$RELEASE_TAG" 2>/dev/null || echo "Seam Ledger $VERSION")"
+          payload="$(jq -n --arg notes "$notes" --arg build "$ASC_BUILD_ID" \
+            '{data:{type:"betaBuildLocalizations",attributes:{locale:"en-US",whatsNew:$notes},relationships:{build:{data:{type:"builds",id:$build}}}}}')"
+          jwt="$(ASC_KEY_FILE="$RUNNER_TEMP/asc-api-key.p8" ruby Tools/asc_jwt.rb)"
+          curl -sS --fail -H "Authorization: Bearer $jwt" -H 'Content-Type: application/json' \
+            -X POST "$api/v1/betaBuildLocalizations" -d "$payload" > /dev/null
+
+      - name: Create GitHub release
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release $RELEASE_TAG already exists; leaving it unchanged."
+          else
+            gh release create "$RELEASE_TAG" --generate-notes \
+              --title "Seam Ledger $VERSION (build $BUILD_NUMBER)"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove API key material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/asc-api-key.p8"
+          echo 'ASC API key file removed'
+
+      - name: Upload archive and export artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seam-ledger-archive-${{ github.ref_name }}
+          path: |
+            ${{ runner.temp }}/SeamLedger.xcarchive
+            ${{ runner.temp }}/ipa/*
+          if-no-files-found: warn
+          retention-days: 30
