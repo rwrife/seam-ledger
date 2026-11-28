@@ -68,6 +68,7 @@ struct BootstrapHomeView: View {
                 }
             }
             .navigationTitle("Seam Ledger")
+            .tint(.primary)
             .toolbar {
                 if selectedID != nil {
                     Button("Projects") { selectedID = nil; project = nil; showingSewing = false }
@@ -200,7 +201,7 @@ struct BootstrapHomeView: View {
             Toggle("Cut on fold (instruction only)", isOn: $fold)
                 .accessibilityIdentifier("piece.fold")
             if !mirrored {
-                TextField("Physical cut count (blank means unknown)", text: $requiredCount)
+                TextField("Physical cut count (blank = unknown)", text: $requiredCount)
                     .keyboardType(.numberPad)
                     .accessibilityIdentifier("piece.count")
             }
@@ -290,7 +291,7 @@ private struct SewingWorkspaceLayout<Reference: View, Controls: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             reference
-            controls
+            controls.frame(maxHeight: .infinity, alignment: .top)
         }
     }
 }

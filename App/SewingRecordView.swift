@@ -202,7 +202,7 @@ struct SewingRecordView: View {
         switch Result(catching: { try current.definition.comparison(for: seam.id) }) {
         case .success(.unknown): Text("Allowance unspecified; comparison unavailable")
         case .success(.equal): Text("Recorded allowances equal")
-        case .success(.mismatch): Text("Warning: recorded allowances differ").foregroundStyle(.orange)
+        case .success(.mismatch): Text("Warning: recorded allowances differ").foregroundStyle(.primary)
         case .failure: Text("Invalid seam record").foregroundStyle(.red)
         }
     }

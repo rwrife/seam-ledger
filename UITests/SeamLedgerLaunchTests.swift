@@ -26,6 +26,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let field = app.textFields[id]
         reveal(field, in: app)
         field.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
         field.typeText(value)
         app.keyboards.buttons["Done"].tap()
     }
