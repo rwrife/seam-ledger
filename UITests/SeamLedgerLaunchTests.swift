@@ -58,10 +58,15 @@ final class SeamLedgerLaunchTests: XCTestCase {
         let open = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Open"))
             .firstMatch
-        if open.waitForExistence(timeout: 2) {
+        if open.waitForExistence(timeout: 5) {
             open.tap()
         } else if file.exists {
-            file.doubleTap()
+            app.typeText("\n")
+            if app.exists && open.waitForExistence(timeout: 2) {
+                open.tap()
+            } else if file.exists {
+                file.doubleTap()
+            }
         }
     }
 
