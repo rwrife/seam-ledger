@@ -54,7 +54,15 @@ final class SeamLedgerLaunchTests: XCTestCase {
             .firstMatch
         if !file.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
         XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
-        file.doubleTap()
+        file.tap()
+        let open = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "Open"))
+            .firstMatch
+        if open.waitForExistence(timeout: 2) {
+            open.tap()
+        } else if file.exists {
+            file.doubleTap()
+        }
     }
 
     @MainActor
