@@ -148,4 +148,18 @@ final class SeamLedgerLaunchTests: XCTestCase {
         app.buttons["cut.Sleeves.1"].tap()
         XCTAssertTrue(app.staticTexts["0 cut of 2; 2 remaining"].waitForExistence(timeout: 10))
     }
+
+    @MainActor
+    func testReportPreviewExplainsPhotoExclusion() throws {
+        let app = XCUIApplication()
+        app.launch()
+        enter("CSV report", id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        let preview = app.buttons["report.preview"]
+        reveal(preview, in: app)
+        preview.tap()
+        XCTAssertTrue(app.staticTexts["report.photosExcluded"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report.export.cuts"].exists)
+        XCTAssertTrue(app.buttons["report.export.seams"].exists)
+    }
 }

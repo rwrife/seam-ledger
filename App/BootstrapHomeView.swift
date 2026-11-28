@@ -21,6 +21,10 @@ struct BootstrapHomeView: View {
     @State private var importing = false
     @State private var showingReference = false
     @State private var showingSewing = false
+    @State private var showingReportPreview = false
+    @State private var exportingReport = false
+    @State private var reportDocument: ReportExportDocument?
+    @State private var reportFilename = "seam-ledger-report"
     @FocusState private var pieceNameFocused: Bool
     @State private var error: String?
     @State private var pendingDefinition: ProjectDefinition?
@@ -53,6 +57,10 @@ struct BootstrapHomeView: View {
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.pdf]) { result in
                 importReference(result)
+            }
+            .fileExporter(isPresented: $exportingReport, document: reportDocument,
+                          contentType: .commaSeparatedText, defaultFilename: reportFilename) { result in
+                if case let .failure(exportError) = result { error = exportError.localizedDescription }
             }
             .confirmationDialog("Replace piece definitions? All old cut and seam progress will reset; history stays available.",
                                 isPresented: Binding(get: { pendingDefinition != nil }, set: { if !$0 { pendingDefinition = nil } }),
@@ -102,6 +110,22 @@ struct BootstrapHomeView: View {
         VStack(alignment: .leading, spacing: 18) {
             let info = projects.first(where: { $0.id == id })
             Text(info?.name ?? "Project").font(.title2.bold())
+            Button("Preview and export reports") { showingReportPreview = true }
+                .frame(minHeight: 44)
+                .accessibilityIdentifier("report.preview")
+                .sheet(isPresented: $showingReportPreview) {
+                    NavigationStack {
+                        ReportExportPreview(projectName: info?.name ?? "Project",
+                                            onExportCuts: {
+                                                beginReportExport(CSVReport.cuts(current), filename: "seam-ledger-cuts")
+                                            },
+                                            onExportSeams: {
+                                                perform {
+                                                    beginReportExport(try CSVReport.seams(current), filename: "seam-ledger-seams")
+                                                }
+                                            })
+                    }
+                }
             Button("Seams and alterations") { showingSewing = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("workspace.sewing")
@@ -238,6 +262,12 @@ struct BootstrapHomeView: View {
     }
     private func perform(_ work: () throws -> Void) {
         do { try work(); error = nil } catch { self.error = error.localizedDescription }
+    }
+    private func beginReportExport(_ csv: String, filename: String) {
+        reportDocument = ReportExportDocument(data: Data(csv.utf8))
+        reportFilename = filename
+        showingReportPreview = false
+        exportingReport = true
     }
     private func importReference(_ result: Result<URL, Error>) {
         perform {
