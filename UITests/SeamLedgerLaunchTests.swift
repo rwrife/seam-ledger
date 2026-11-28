@@ -49,7 +49,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
 
     @MainActor
     private func importExportedBackup(in app: XCUIApplication) {
-        let file = app.descendants(matching: .any)
+        let file = app.cells
             .matching(NSPredicate(format: "label CONTAINS %@", "seam-ledger-backup"))
             .firstMatch
         if !file.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
@@ -59,7 +59,10 @@ final class SeamLedgerLaunchTests: XCTestCase {
             .matching(NSPredicate(format: "label == %@", "Open"))
             .firstMatch
         if open.waitForExistence(timeout: 2) { open.tap() }
-        else { file.doubleTap() }
+        else {
+            file.tap()
+            if open.waitForExistence(timeout: 2) { open.tap() }
+        }
     }
 
     @MainActor
@@ -238,7 +241,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
 
         app.buttons["backup.import"].tap()
         importExportedBackup(in: app)
-        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 reference PDF"))
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 alteration photo(s)"))
         app.buttons["backup.restore"].tap()
@@ -260,7 +263,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["All local projects and attachments were deleted. Files you already exported remain outside the app."].waitForExistence(timeout: 10))
         app.buttons["backup.import"].tap()
         importExportedBackup(in: app)
-        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10), app.debugDescription)
         app.buttons["backup.restore"].tap()
         app.buttons.matching(identifier: "backup.restore.confirm").firstMatch.tap()
         XCTAssertTrue(app.staticTexts["Restore completed."].waitForExistence(timeout: 10))
