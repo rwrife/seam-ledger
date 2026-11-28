@@ -29,6 +29,25 @@ final class SeamLedgerLaunchTests: XCTestCase {
     }
 
     @MainActor
+    private func chooseLocalFilesLocation(in app: XCUIApplication) {
+        let browse = app.buttons["Browse"]
+        if browse.waitForExistence(timeout: 2) { browse.tap() }
+        let local = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "On My iPhone"))
+            .firstMatch
+        XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
+        local.tap()
+    }
+
+    @MainActor
+    private func completeFileExport(in app: XCUIApplication) {
+        let save = app.buttons["Save"]
+        if !save.waitForExistence(timeout: 10) { chooseLocalFilesLocation(in: app) }
+        XCTAssertTrue(save.waitForExistence(timeout: 10), app.debugDescription)
+        save.tap()
+    }
+
+    @MainActor
     private func choose(_ value: String, id: String, in app: XCUIApplication) throws {
         let picker = app.buttons[id]
         reveal(picker, in: app)
@@ -150,16 +169,108 @@ final class SeamLedgerLaunchTests: XCTestCase {
     }
 
     @MainActor
+    func testBackupPreviewRestoreAndDeleteAll() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITestPDF", "-UITestReport", "-UITestRestoreFailure", "-UITestBackupImport"]
+        app.launch()
+        let name = "Backup-\(UUID().uuidString.prefix(8))"
+        enter(name, id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        let importPDF = app.buttons["reference.import"]
+        reveal(importPDF, in: app)
+        importPDF.tap()
+        XCTAssertTrue(app.buttons["reference.open"].waitForExistence(timeout: 10), app.debugDescription)
+        enter("Panel", id: "piece.name", in: app)
+        let mirrored = app.switches["piece.mirrored"]
+        reveal(mirrored, in: app)
+        mirrored.tap()
+        let addPiece = app.buttons["piece.add"]
+        reveal(addPiece, in: app)
+        addPiece.tap()
+        let cut = app.buttons["cut.Panel.1"]
+        reveal(cut, in: app)
+        cut.tap()
+
+        let reportPreview = app.buttons["report.exportPDF"]
+        reveal(reportPreview, in: app)
+        reportPreview.tap()
+        XCTAssertTrue(app.buttons.matching(identifier: "report.export.confirm").firstMatch.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts.containing(
+            NSPredicate(format: "label CONTAINS %@", "Photos and reference PDF contents are excluded")
+        ).firstMatch.exists, app.debugDescription)
+        app.buttons.matching(identifier: "report.export.confirm").firstMatch.tap()
+        completeFileExport(in: app)
+        XCTAssertFalse(app.staticTexts["workspace.error"].exists, app.debugDescription)
+
+        let addPhoto = app.buttons["backup.test.addPhoto"]
+        reveal(addPhoto, in: app)
+        addPhoto.tap()
+
+        let reportTest = app.buttons["report.test"]
+        reveal(reportTest, in: app)
+        reportTest.tap()
+        XCTAssertTrue(app.staticTexts["PDF report generated; photo data is excluded."].waitForExistence(timeout: 10),
+                      app.debugDescription)
+
+        let open = app.buttons["backup.open"]
+        reveal(open, in: app)
+        open.tap()
+        XCTAssertTrue(app.staticTexts["The exported file contains private measurements and photos. Store and share it carefully."].exists)
+        app.buttons["backup.export"].tap()
+        completeFileExport(in: app)
+        XCTAssertTrue(app.staticTexts["backup.message"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["backup.message"].label.contains("Backup saved"))
+
+        app.buttons["backup.import"].tap()
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 reference PDF"))
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 alteration photo(s)"))
+        app.buttons["backup.restore"].tap()
+        app.buttons.matching(identifier: "backup.restore.confirm").firstMatch.tap()
+        let restoreFailure = app.staticTexts["backup.message"]
+        XCTAssertTrue(restoreFailure.waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(restoreFailure.label.contains("Restore did not complete"), app.debugDescription)
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.staticTexts["1 cut of 2; 1 remaining"].waitForExistence(timeout: 10))
+        let existingPDF = app.buttons["reference.open"]
+        XCTAssertTrue(existingPDF.waitForExistence(timeout: 10), app.debugDescription)
+        existingPDF.tap()
+        XCTAssertTrue(app.navigationBars["Owned reference"].waitForExistence(timeout: 10), app.debugDescription)
+        app.buttons["Done"].tap()
+
+        app.buttons["backup.open"].tap()
+        app.buttons["backup.deleteAll"].tap()
+        app.buttons.matching(identifier: "backup.delete.confirm").firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["All local projects and attachments were deleted. Files you already exported remain outside the app."].waitForExistence(timeout: 10))
+        app.buttons["backup.import"].tap()
+        XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10), app.debugDescription)
+        app.buttons["backup.restore"].tap()
+        app.buttons.matching(identifier: "backup.restore.confirm").firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["Restore completed."].waitForExistence(timeout: 10))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(app.buttons[name].waitForExistence(timeout: 10))
+        app.buttons[name].tap()
+        XCTAssertTrue(app.staticTexts["1 cut of 2; 1 remaining"].waitForExistence(timeout: 10))
+        let restoredPDF = app.buttons["reference.open"]
+        XCTAssertTrue(restoredPDF.waitForExistence(timeout: 10), app.debugDescription)
+        restoredPDF.tap()
+        XCTAssertTrue(app.navigationBars["Owned reference"].waitForExistence(timeout: 10), app.debugDescription)
+    }
+
+    @MainActor
     func testReportPreviewExplainsPhotoExclusion() throws {
         let app = XCUIApplication()
         app.launch()
         enter("CSV report", id: "project.name", in: app)
         app.buttons["project.create"].tap()
-        let preview = app.buttons["report.preview"]
+        let preview = app.buttons["report.csv.preview"]
         reveal(preview, in: app)
         preview.tap()
         XCTAssertTrue(app.staticTexts["report.photosExcluded"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["report.export.cuts"].exists)
         XCTAssertTrue(app.buttons["report.export.seams"].exists)
+        app.buttons["report.export.cuts"].tap()
+        completeFileExport(in: app)
+        XCTAssertFalse(app.staticTexts["workspace.error"].exists, app.debugDescription)
     }
 }

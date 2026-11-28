@@ -22,7 +22,8 @@ Concrete examples: distinguish outer and lining sleeve pairs; catch 10 mm versus
 - Per-piece required/cut counts, mirrored-pair validation, reversible cutting events.
 - Explicit seam edge pairing and exact allowance comparison, with sewn/pressed state.
 - Fitting notes, optional photos, and manually entered before/after measurements.
-- Versioned JSON backup including references and photos; previewed replace restore; CSV cut/seam exports and a shareable PDF project report.
+- Versioned JSON backups include project histories, alteration photos, and owned reference PDFs, with attachment digests and size/path validation before previewed replacement.
+- CSV cut/seam report generation, previewed Files export, and on-device PDF report export are implemented; native export acceptance is still under verification.
 - VoiceOver, Dynamic Type, high contrast and large controls; no color-only warnings.
 
 ## Platform contract and dual-screen target
@@ -33,7 +34,7 @@ The iPhone Duo design target keeps the pattern page/edge diagram visible on one 
 
 ## Privacy, permissions and storage
 
-SQLite and imported PDF/photo copies live in the app sandbox. Files import uses the system document picker; PhotosPicker imports selected images without broad library permission. No camera, microphone, location, contacts or notifications required in MVP. No network, accounts, analytics, ads, subscriptions, cloud sync or AI. User-initiated Files/share exports can expose measurements and photos: warn clearly and allow a report without photos. Delete-all removes the database and owned attachment files; files already exported remain outside app control.
+SQLite project histories and imported PDF copies live in the app sandbox; picked alteration photos are stored in the local event history. Files import uses the system document picker; PhotosPicker imports selected images without broad library permission. No camera, microphone, location, contacts or notifications required in MVP. No network, accounts, analytics, ads, subscriptions, cloud sync or AI. User-initiated backup exports can expose measurements and photos, while CSV reports exclude photos. Delete-all removes local project histories and owned attachment files; files already exported remain outside app control.
 
 ## Non-goals and limits
 

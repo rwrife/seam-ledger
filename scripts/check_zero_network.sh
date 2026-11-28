@@ -2,8 +2,9 @@
 # Zero-network gate (issue #1, binding project contract).
 #
 # SeamLedger is zero-network BY CONSTRUCTION: the app, the UI tests, and the
-# domain package must never use network APIs. Only the exact GRDB build-time
-# dependency declaration below is exempt from the URL scan; runtime APIs are not.
+# domain package must never use network APIs. Only the exact reviewed GRDB and
+# Swift Crypto build-time dependency declarations are exempt from the URL scan;
+# runtime APIs are not.
 #
 # Scanned roots: App/ and UITests/ (app sources) and Packages/*/Sources/.
 # SwiftPM .build directories are skipped so vendored checkouts never trip
@@ -52,8 +53,10 @@ for root in "${ROOTS[@]}"; do
     if hits=$(grep -RnE --include='*.swift' --include='*.h' --include='*.m' --include='*.c' \
       --exclude-dir=.build --exclude-dir=.swiftpm \
       "$pat" "$root"); then
-      # Exempt only this entire reviewed declaration at this exact manifest path.
-      hits=$(printf '%s\n' "$hits" | sed '\|^Packages/SeamLedgerStore/Package.swift:[0-9][0-9]*:        \.package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),$|d')
+      # Exempt only reviewed exact declarations at this exact manifest path.
+      hits=$(printf '%s\n' "$hits" | sed \
+        -e '\|^Packages/SeamLedgerStore/Package.swift:[0-9][0-9]*:        \.package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.8.0"),$|d' \
+        -e '\|^Packages/SeamLedgerStore/Package.swift:[0-9][0-9]*:        \.package(url: "https://github.com/apple/swift-crypto.git", exact: "3.15.1"),$|d')
       matches+="$hits"$'\n'
     else
       code=$?
