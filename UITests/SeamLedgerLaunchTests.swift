@@ -42,27 +42,22 @@ final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
     private func completeFileExport(in app: XCUIApplication) {
         let save = app.buttons["Save"]
-        if !save.exists { chooseLocalFilesLocation(in: app) }
+        if !save.waitForExistence(timeout: 10) { chooseLocalFilesLocation(in: app) }
         XCTAssertTrue(save.waitForExistence(timeout: 10), app.debugDescription)
         save.tap()
     }
 
     @MainActor
     private func importExportedBackup(in app: XCUIApplication) {
-        let file = app.cells
-            .matching(NSPredicate(format: "label CONTAINS %@", "seam-ledger-backup"))
-            .firstMatch
-        if !file.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
-        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
-        file.tap()
+        let fileName = app.staticTexts["seam-ledger-backup.json"]
+        if !fileName.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
+        XCTAssertTrue(fileName.waitForExistence(timeout: 10), app.debugDescription)
+        fileName.tap()
         let open = app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@", "Open"))
             .firstMatch
         if open.waitForExistence(timeout: 2) { open.tap() }
-        else {
-            file.tap()
-            if open.waitForExistence(timeout: 2) { open.tap() }
-        }
+        else if fileName.exists { fileName.doubleTap() }
     }
 
     @MainActor

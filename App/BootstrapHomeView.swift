@@ -26,6 +26,7 @@ struct BootstrapHomeView: View {
     @State private var reportDocument: ProjectPDFReportDocument?
     @State private var exportingReport = false
     @State private var showingReportPreview = false
+    @State private var pendingReportExport = false
     @State private var reportPreviewMessage = ""
     @State private var didInjectRestoreFailure = false
     @State private var reportTestMessage: String?
@@ -96,12 +97,17 @@ struct BootstrapHomeView: View {
         }
         .confirmationDialog("PDF report preview", isPresented: $showingReportPreview,
                             titleVisibility: .visible) {
-            Button("Export PDF report") { exportingReport = true }
+            Button("Export PDF report") { pendingReportExport = true }
                 .accessibilityIdentifier("report.export.confirm")
             Button("Close preview") { showingReportPreview = false }
                 .accessibilityIdentifier("report.preview.close")
         } message: {
             Text(reportPreviewMessage)
+        }
+        .onChange(of: showingReportPreview) { _, isPresented in
+            guard !isPresented, pendingReportExport else { return }
+            pendingReportExport = false
+            exportingReport = true
         }
     }
 
