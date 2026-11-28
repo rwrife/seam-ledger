@@ -29,6 +29,37 @@ final class SeamLedgerLaunchTests: XCTestCase {
     }
 
     @MainActor
+    private func chooseLocalFilesLocation(in app: XCUIApplication) {
+        let browse = app.buttons["Browse"]
+        if browse.waitForExistence(timeout: 2) { browse.tap() }
+        let local = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label == %@", "On My iPhone"))
+            .firstMatch
+        XCTAssertTrue(local.waitForExistence(timeout: 10), app.debugDescription)
+        local.tap()
+    }
+
+    @MainActor
+    private func saveExportedBackup(in app: XCUIApplication) {
+        let save = app.buttons["Save"]
+        if !save.exists { chooseLocalFilesLocation(in: app) }
+        XCTAssertTrue(save.waitForExistence(timeout: 10), app.debugDescription)
+        save.tap()
+    }
+
+    @MainActor
+    private func importExportedBackup(in app: XCUIApplication) {
+        let file = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", "seam-ledger-backup"))
+            .firstMatch
+        if !file.waitForExistence(timeout: 2) { chooseLocalFilesLocation(in: app) }
+        XCTAssertTrue(file.waitForExistence(timeout: 10), app.debugDescription)
+        file.tap()
+        let open = app.buttons["Open"]
+        if open.waitForExistence(timeout: 2) { open.tap() }
+    }
+
+    @MainActor
     private func choose(_ value: String, id: String, in app: XCUIApplication) throws {
         let picker = app.buttons[id]
         reveal(picker, in: app)
@@ -152,7 +183,7 @@ final class SeamLedgerLaunchTests: XCTestCase {
     @MainActor
     func testBackupPreviewRestoreAndDeleteAll() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-UITestBackup", "-UITestPDF", "-UITestReport", "-UITestRestoreFailure"]
+        app.launchArguments = ["-UITestPDF", "-UITestReport", "-UITestRestoreFailure"]
         app.launch()
         let name = "Backup-\(UUID().uuidString.prefix(8))"
         enter(name, id: "project.name", in: app)
@@ -195,9 +226,13 @@ final class SeamLedgerLaunchTests: XCTestCase {
         reveal(open, in: app)
         open.tap()
         XCTAssertTrue(app.staticTexts["The exported file contains private measurements and photos. Store and share it carefully."].exists)
-        app.buttons["backup.test.save"].tap()
-        XCTAssertTrue(app.staticTexts["Local backup test fixture saved."].waitForExistence(timeout: 10))
-        app.buttons["backup.test.load"].tap()
+        app.buttons["backup.export"].tap()
+        saveExportedBackup(in: app)
+        XCTAssertTrue(app.staticTexts["backup.message"].waitForExistence(timeout: 10), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["backup.message"].label.contains("Backup saved"))
+
+        app.buttons["backup.import"].tap()
+        importExportedBackup(in: app)
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 reference PDF"))
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].label.contains("1 alteration photo(s)"))
@@ -215,12 +250,11 @@ final class SeamLedgerLaunchTests: XCTestCase {
         app.buttons["Done"].tap()
 
         app.buttons["backup.open"].tap()
-        app.buttons["backup.test.save"].tap()
-        XCTAssertTrue(app.staticTexts["Local backup test fixture saved."].waitForExistence(timeout: 10))
         app.buttons["backup.deleteAll"].tap()
         app.buttons.matching(identifier: "backup.delete.confirm").firstMatch.tap()
         XCTAssertTrue(app.staticTexts["All local projects and attachments were deleted. Files you already exported remain outside the app."].waitForExistence(timeout: 10))
-        app.buttons["backup.test.load"].tap()
+        app.buttons["backup.import"].tap()
+        importExportedBackup(in: app)
         XCTAssertTrue(app.staticTexts["backup.preview.summary"].waitForExistence(timeout: 10))
         app.buttons["backup.restore"].tap()
         app.buttons.matching(identifier: "backup.restore.confirm").firstMatch.tap()
@@ -233,5 +267,19 @@ final class SeamLedgerLaunchTests: XCTestCase {
         XCTAssertTrue(restoredPDF.waitForExistence(timeout: 10), app.debugDescription)
         restoredPDF.tap()
         XCTAssertTrue(app.navigationBars["Owned reference"].waitForExistence(timeout: 10), app.debugDescription)
+    }
+
+    @MainActor
+    func testReportPreviewExplainsPhotoExclusion() throws {
+        let app = XCUIApplication()
+        app.launch()
+        enter("CSV report", id: "project.name", in: app)
+        app.buttons["project.create"].tap()
+        let preview = app.buttons["report.csv.preview"]
+        reveal(preview, in: app)
+        preview.tap()
+        XCTAssertTrue(app.staticTexts["report.photosExcluded"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["report.export.cuts"].exists)
+        XCTAssertTrue(app.buttons["report.export.seams"].exists)
     }
 }

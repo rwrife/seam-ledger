@@ -70,14 +70,6 @@ struct BackupManagerView: View {
             Button("Export full backup (JSON)") { beginExport() }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("backup.export")
-#if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-UITestBackup") {
-                Button("Save local backup test fixture") { saveUITestBackup() }
-                    .accessibilityIdentifier("backup.test.save")
-                Button("Load local backup test fixture") { loadUITestBackup() }
-                    .accessibilityIdentifier("backup.test.load")
-            }
-#endif
             Button("Preview backup to restore") { importing = true }
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("backup.import")
@@ -122,30 +114,6 @@ struct BackupManagerView: View {
             message = nil
         } catch { message = "Backup could not be created: \(error.localizedDescription)" }
     }
-
-#if DEBUG
-    private var uiTestBackupURL: URL {
-        FileManager.default.temporaryDirectory.appending(path: "seam-ledger-uitest-backup.json")
-    }
-
-    private func saveUITestBackup() {
-        do {
-            try makeBackup().write(to: uiTestBackupURL, options: .atomic)
-            message = "Local backup test fixture saved."
-        } catch { message = "Test backup failed: \(error.localizedDescription)" }
-    }
-
-    private func loadUITestBackup() {
-        do {
-            let handle = try FileHandle(forReadingFrom: uiTestBackupURL)
-            defer { try? handle.close() }
-            let data = try handle.read(upToCount: ProjectBackupArchive.maximumArchiveBytes + 1) ?? Data()
-            archive = try ProjectBackupArchive.decode(data)
-            try FileManager.default.removeItem(at: uiTestBackupURL)
-            message = nil
-        } catch { message = "Test backup could not be loaded: \(error.localizedDescription)" }
-    }
-#endif
 
     private func importArchive(_ result: Result<URL, Error>) {
         do {
